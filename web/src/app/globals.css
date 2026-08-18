@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+:root {
+  --background: #05070b;
+  --foreground: #f5f6fa;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-ink-950: #05070b;
+  --color-ink-900: #0a0e16;
+  --color-ink-800: #10141f;
+  --color-mist: #b8c0d4;
+  --color-mist-dim: #7c8499;
+  --color-accent: #7cf5d8;
+  --color-accent-2: #8b7bff;
+
+  --animate-drift: drift 22s ease-in-out infinite;
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2%, -3%, 0) scale(1.05);
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}

@@ -63,6 +63,7 @@ test/
   StrategyVault.test.js
 scripts/
   deploy.js
+web/                      # Next.js marketing site — see web/README.md
 ```
 
 ## Usage
@@ -72,3 +73,5 @@ npm install
 npx hardhat compile
 npx hardhat test
 ```
+
+For the marketing site, see [`web/README.md`](web/README.md).
