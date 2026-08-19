@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mimic — Copy-trading vaults for Nado",
+  title: "Mimic — Markets & portfolio for Nado",
   description:
-    "Mimic pools follower capital into on-chain vaults that mirror a strategist's trades on Nado's orderbook, on Ink L2.",
+    "Mimic is a market data and portfolio dashboard for Nado: live-style prices, charts, and account tracking for Nado's orderbook on Ink L2.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

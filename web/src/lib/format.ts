@@ -43,18 +43,15 @@ export function formatDateTime(iso: string) {
   });
 }
 
-const AVATAR_PALETTE = [
-  "bg-accent/15 text-accent",
-  "bg-violet-400/15 text-violet-300",
-  "bg-amber-400/15 text-amber-300",
-  "bg-sky-400/15 text-sky-300",
-  "bg-rose-400/15 text-rose-300",
-  "bg-emerald-400/15 text-emerald-300",
-];
+// More decimal places for sub-$1 assets (DOGE, etc.) than for BTC-sized prices — plain
+// `toLocaleString` with fixed fraction digits, not compact notation, so it's not exposed to
+// the ICU trailing-zero divergence `formatUsd` above had to work around.
+export function formatPrice(value: number) {
+  const decimals = value >= 100 ? 2 : value >= 1 ? 4 : 6;
+  return value.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
 
-// Deterministic (pure function of the string, no randomness) so the same handle always gets
-// the same color on both server and client.
-export function avatarPalette(seed: string) {
-  const sum = [...seed].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  return AVATAR_PALETTE[sum % AVATAR_PALETTE.length];
+export function formatFundingRate(value: number) {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(4)}%`;
 }

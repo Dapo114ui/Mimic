@@ -2,10 +2,9 @@ import Link from "next/link";
 import { ConnectButton } from "./ConnectButton";
 
 const NAV_LINKS = [
-  { href: "/#how-it-works", label: "How it works" },
-  { href: "/#why-mimic", label: "Why Mimic" },
-  { href: "/vaults", label: "Vaults" },
-  { href: "https://github.com/Dapo114ui/Mimic", label: "Contracts", external: true },
+  { href: "/", label: "Markets" },
+  { href: "/portfolio", label: "Portfolio" },
+  { href: "https://github.com/Dapo114ui/Mimic", label: "Source", external: true },
 ];
 
 export function Navbar() {
