@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { StrategyTag, Vault } from "@/lib/vaults";
-import { formatSignedPct, formatUsd, truncateAddress } from "@/lib/format";
+import { formatSignedPct, formatUsd } from "@/lib/format";
+import { Avatar } from "./Avatar";
 
 type SortKey = "allTimeReturnPct" | "tvlUsd" | "followers";
 
@@ -65,14 +66,15 @@ export function LeaderboardTable({ vaults }: { vaults: Vault[] }) {
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-white/10">
-        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[860px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-mist-dim">
               <th className="px-5 py-4 font-medium">Rank</th>
-              <th className="px-5 py-4 font-medium">Vault</th>
+              <th className="px-5 py-4 font-medium">Strategist</th>
               <th className="px-5 py-4 font-medium">Strategy</th>
               <th className="px-5 py-4 text-right font-medium">TVL</th>
               <th className="px-5 py-4 text-right font-medium">All-time return</th>
+              <th className="px-5 py-4 text-right font-medium">Win rate</th>
               <th className="px-5 py-4 text-right font-medium">Fee</th>
               <th className="px-5 py-4 text-right font-medium">Followers</th>
             </tr>
@@ -93,10 +95,11 @@ export function LeaderboardTable({ vaults }: { vaults: Vault[] }) {
                     </span>
                   </td>
                   <td className="px-5 py-4 align-middle">
-                    <Link href={`/vaults/${vault.slug}`} className="group flex flex-col">
-                      <span className="font-medium text-foreground group-hover:text-accent">{vault.name}</span>
-                      <span className="font-mono text-xs text-mist-dim">
-                        {truncateAddress(vault.strategistAddress)}
+                    <Link href={`/vaults/${vault.slug}`} className="group flex items-center gap-3">
+                      <Avatar handle={vault.strategist.handle} size="sm" />
+                      <span className="flex flex-col">
+                        <span className="font-medium text-foreground group-hover:text-accent">{vault.name}</span>
+                        <span className="text-xs text-mist-dim">{vault.strategist.handle}</span>
                       </span>
                     </Link>
                   </td>
@@ -114,6 +117,9 @@ export function LeaderboardTable({ vaults }: { vaults: Vault[] }) {
                     }`}
                   >
                     {formatSignedPct(vault.allTimeReturnPct)}
+                  </td>
+                  <td className="px-5 py-4 text-right align-middle text-mist">
+                    {vault.strategist.winRatePct}%
                   </td>
                   <td className="px-5 py-4 text-right align-middle text-mist">
                     {(vault.performanceFeeBps / 100).toFixed(0)}%
