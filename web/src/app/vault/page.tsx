@@ -3,7 +3,7 @@ import { NlpVaultForm } from "@/components/terminal/NlpVaultForm";
 
 export const metadata: Metadata = {
   title: "NLP Vault — Mimic",
-  description: "Mint or burn Nado's native liquidity vault (NLP) on Ink Sepolia testnet.",
+  description: "Mint or burn Nado's native liquidity vault (NLP) on Ink mainnet.",
 };
 
 export default function VaultPage() {

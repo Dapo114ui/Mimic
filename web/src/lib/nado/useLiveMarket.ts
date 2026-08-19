@@ -12,7 +12,7 @@ type AllProductsResponse = {
   }[];
 };
 
-// Live oracle price + open interest for a single product, polled from Nado's testnet gateway.
+// Live oracle price + open interest for a single product, polled from Nado's mainnet gateway.
 // Everything else this dashboard shows (24h change, volume, funding rate) would need Nado's
 // separate indexer/historical service — `all_products` only exposes a point-in-time snapshot,
 // so those stats stay as sample data rather than being half-faked here.

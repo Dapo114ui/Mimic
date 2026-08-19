@@ -141,7 +141,7 @@ export function OrderForm({ productId }: { productId: number }) {
               side === "buy" ? "bg-emerald-400 text-ink-950 hover:bg-emerald-300" : "bg-rose-400 text-ink-950 hover:bg-rose-300"
             }`}
           >
-            {status.type === "pending" ? "Signing…" : `${side === "buy" ? "Buy" : "Sell"} (testnet)`}
+            {status.type === "pending" ? "Signing…" : side === "buy" ? "Buy" : "Sell"}
           </button>
         )}
 

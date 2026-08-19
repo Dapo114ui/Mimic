@@ -25,7 +25,7 @@ export function LivePriceBadge({ productId }: { productId: number }) {
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-300">
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-      Live from Nado testnet: ${formatPrice(data.price)} · {formatUsd(data.openInterestUsd)} OI
+      Live from Nado: ${formatPrice(data.price)} · {formatUsd(data.openInterestUsd)} OI
     </span>
   );
 }

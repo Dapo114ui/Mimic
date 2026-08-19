@@ -121,7 +121,7 @@ export function NlpVaultForm() {
             disabled={status.type === "pending"}
             className="w-full rounded-full bg-accent px-6 py-3 text-sm font-semibold text-ink-950 transition hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {status.type === "pending" ? "Signing…" : `${mode === "mint" ? "Mint" : "Burn"} NLP (testnet)`}
+            {status.type === "pending" ? "Signing…" : `${mode === "mint" ? "Mint" : "Burn"} NLP`}
           </button>
         )}
 
