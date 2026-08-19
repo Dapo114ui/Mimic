@@ -2,9 +2,12 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getAllMarkets, getCandles, getMarketBySymbol, getRecentFills } from "@/lib/markets";
 import { formatDateTime, formatFundingRate, formatPrice, formatSignedPct, formatUsd } from "@/lib/format";
+import { KNOWN_PRODUCTS } from "@/lib/nado/config";
 import { CandlestickChart } from "@/components/terminal/CandlestickChart";
 import { SideBadge } from "@/components/terminal/SideBadge";
 import { SampleDataBanner } from "@/components/terminal/SampleDataBanner";
+import { LivePriceBadge } from "@/components/terminal/LivePriceBadge";
+import { OrderForm } from "@/components/terminal/OrderForm";
 
 export function generateStaticParams() {
   return getAllMarkets().map((market) => ({ symbol: market.symbol }));
@@ -24,6 +27,7 @@ export default async function MarketDetailPage({ params }: PageProps<"/markets/[
   const candles = getCandles(market);
   const fills = getRecentFills(market);
   const isUp = market.change24hPct >= 0;
+  const productId = (KNOWN_PRODUCTS as Record<string, number>)[market.symbol];
 
   return (
     <div className="px-6 py-16">
@@ -34,7 +38,10 @@ export default async function MarketDetailPage({ params }: PageProps<"/markets/[
 
         <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <SampleDataBanner>Sample data</SampleDataBanner>
+            <div className="flex flex-wrap items-center gap-2">
+              <SampleDataBanner>Sample chart &amp; stats</SampleDataBanner>
+              {productId !== undefined && <LivePriceBadge productId={productId} />}
+            </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
               {market.symbol}
             </h1>
@@ -57,6 +64,17 @@ export default async function MarketDetailPage({ params }: PageProps<"/markets/[
           <Stat label="Open interest" value={formatUsd(market.openInterestUsd)} />
           <Stat label="Funding (8h)" value={formatFundingRate(market.fundingRatePct)} />
         </div>
+
+        {productId !== undefined ? (
+          <div className="mt-10">
+            <OrderForm productId={productId} />
+          </div>
+        ) : (
+          <p className="mt-10 rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-sm text-mist-dim">
+            Order placement isn&apos;t available for {market.symbol} — its Nado product ID
+            couldn&apos;t be confidently identified from the gateway&apos;s market list.
+          </p>
+        )}
 
         <section className="mt-10">
           <h2 className="text-lg font-medium text-foreground">Recent trades</h2>

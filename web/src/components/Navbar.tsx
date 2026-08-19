@@ -4,6 +4,7 @@ import { ConnectButton } from "./ConnectButton";
 const NAV_LINKS = [
   { href: "/", label: "Markets" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/vault", label: "Vault" },
   { href: "https://github.com/Dapo114ui/Mimic", label: "Source", external: true },
 ];
 
