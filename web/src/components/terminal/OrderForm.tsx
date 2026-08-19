@@ -40,6 +40,10 @@ export function OrderForm({ productId }: { productId: number }) {
       const priceX18 = BigInt(Math.round(priceNum * 1e18));
       const nonce = generateNonce();
       const expiration = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
+      // 0 packs to: version 0, not isolated, order type 0 (DEFAULT/standard limit order),
+      // not reduce-only, no trigger — i.e. exactly the plain limit order this form places.
+      // Confirmed against the documented 128-bit appendix layout (version:8, isolated:1,
+      // orderType:2, reduceOnly:1, trigger:2, reserved:50, value:64).
       const appendix = 0n;
 
       const signature = await signTypedDataAsync({

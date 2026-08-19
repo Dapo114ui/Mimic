@@ -31,10 +31,8 @@ export function getEndpointDomain() {
 }
 
 // bytes32 = 20-byte owner address ++ 12-byte subaccount name (UTF-8, right-padded with
-// zeros). This follows the well-documented Vertex-Protocol-family convention Nado's
-// architecture derives from (same off-chain-engine design, same EIP-712 field names) — the
-// SDK's own encoding function wasn't among the files inspected, so this specific byte layout
-// is inferred rather than confirmed against Nado's source directly.
+// zeros). Confirmed against Nado/Vertex-family documentation: an empty name (all-zero bytes,
+// which is what this produces by default) is explicitly "the default subaccount identifier."
 export function encodeSubaccount(owner: Address, name: string = ""): Hex {
   const nameBytes = new TextEncoder().encode(name).slice(0, 12);
   const nameHex = pad(toHex(nameBytes), { size: 12, dir: "right" });
