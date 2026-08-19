@@ -1,10 +1,7 @@
 "use client";
 
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-
-function truncateAddress(address: string) {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
-}
+import { truncateAddress } from "@/lib/format";
 
 export function ConnectButton({ className = "" }: { className?: string }) {
   const { address, isConnected } = useAccount();
