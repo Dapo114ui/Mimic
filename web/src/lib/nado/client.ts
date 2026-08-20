@@ -2,13 +2,16 @@ import { NADO_GATEWAY_REST } from "./config";
 
 type GatewayResponse<T> = { status: "success"; data: T } | { status: "failure"; error?: string };
 
-// Only the no-params case is implemented (`?type=...`) — that's what's been verified live
-// against the gateway. Nado's docs mention queries can also take a params object, but the
-// exact wire format for that (query string vs. POST body) wasn't confirmed, so it's not
-// guessed at here.
-export async function nadoQuery<T>(type: string): Promise<T> {
-  const res = await fetch(`${NADO_GATEWAY_REST}/query?type=${encodeURIComponent(type)}`, {
-    headers: { Accept: "application/json" },
+// POST { type, ...params } to /query — confirmed against the SDK's own EngineBaseClient.query()
+// (packages/engine-client/src/EngineBaseClient.ts), which uses this for every query including
+// zero-param ones like `all_products` (body `{type:"all_products"}`). An earlier version of
+// this function used GET with `?type=...`, which also happens to work live, but POST is what
+// Nado's own client actually does, so params-taking queries (e.g. `subaccount_info`) follow it.
+export async function nadoQuery<T>(type: string, params?: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${NADO_GATEWAY_REST}/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ type, ...params }),
   });
   const json = (await res.json()) as GatewayResponse<T>;
   if (json.status !== "success") {

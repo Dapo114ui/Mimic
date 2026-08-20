@@ -1,0 +1,108 @@
+import type { Address } from "viem";
+import { nadoQuery } from "./client";
+import { encodeSubaccount } from "./eip712";
+
+// Real per-subaccount state from the gateway (`subaccount_info`) — confirmed against
+// EngineQueryClient.getSubaccountSummary() in Nado's SDK (packages/engine-client/src). Every
+// numeric field here, `_x18`-suffixed or not, is an 18-decimal fixed-point string: verified by
+// checking real converted magnitudes against what an active account should plausibly look like
+// (e.g. a `perp_balances[].balance.amount` of "3176150000000000000" is a nonsensical ~3.2e18 BTC
+// unless divided by 1e18, at which point it's a completely ordinary 3.176 BTC position) — this
+// contradicts an SDK-reading research pass that claimed non-`_x18` fields skip the ÷1e18 step;
+// real observed numbers won here over that reading.
+type PerpBalance = {
+  product_id: number;
+  balance: { amount: string; v_quote_balance: string; last_cumulative_funding_x18: string };
+};
+
+type PerpProductInfo = { product_id: number; oracle_price_x18: string };
+
+type HealthGroup = { assets: string; liabilities: string; health: string };
+
+type SubaccountInfoResponse = {
+  exists: boolean;
+  healths: [HealthGroup, HealthGroup, HealthGroup]; // [initial, maintenance, unweighted]
+  perp_balances: PerpBalance[];
+  perp_products: PerpProductInfo[];
+};
+
+const X18 = 1e18;
+const fromX18 = (v: string) => Number(BigInt(v)) / X18;
+
+export async function getSubaccountInfo(owner: Address): Promise<SubaccountInfoResponse> {
+  const subaccount = encodeSubaccount(owner);
+  return nadoQuery<SubaccountInfoResponse>("subaccount_info", { subaccount });
+}
+
+export type AccountSummary = {
+  equityUsd: number;
+  availableMarginUsd: number;
+  marginRatioPct: number; // 0 = no margin used (safe), 100 = at the maintenance threshold (liquidatable)
+  unrealizedPnlUsd: number;
+};
+
+export type OpenPosition = {
+  productId: number;
+  market: string;
+  side: "Long" | "Short";
+  sizeUsd: number;
+  entryPrice: number;
+  markPrice: number;
+  unrealizedPnlUsd: number;
+};
+
+// PnL formula confirmed against Nado's own `calcPerpBalanceValue`
+// (packages/shared/src/utils/balanceValue.ts): unrealizedPnl = amount * oraclePrice + vQuoteBalance.
+// v_quote_balance already has settled funding folded in — no separate funding netting needed.
+// entryPrice has no SDK helper; -vQuoteBalance/amount is the standard break-even-price-ignoring-
+// funding derivation for this balance model.
+export function derivePositions(info: SubaccountInfoResponse, symbolMap: Map<number, string>): OpenPosition[] {
+  const priceByProduct = new Map(info.perp_products.map((p) => [p.product_id, fromX18(p.oracle_price_x18)]));
+
+  return info.perp_balances
+    .filter((b) => BigInt(b.balance.amount) !== 0n)
+    .map((b): OpenPosition => {
+      const amount = fromX18(b.balance.amount);
+      const vQuote = fromX18(b.balance.v_quote_balance);
+      const markPrice = priceByProduct.get(b.product_id) ?? 0;
+      return {
+        productId: b.product_id,
+        market: symbolMap.get(b.product_id) ?? `Product #${b.product_id}`,
+        side: amount >= 0 ? "Long" : "Short",
+        sizeUsd: Math.abs(amount) * markPrice,
+        entryPrice: amount !== 0 ? -vQuote / amount : 0,
+        markPrice,
+        unrealizedPnlUsd: amount * markPrice + vQuote,
+      };
+    });
+}
+
+// `healths` is server-computed from the same balances using each product's risk weights — using
+// it directly avoids re-deriving Nado's own risk-weighting logic. health = assets - liabilities
+// (verified against real numbers); group order [initial, maintenance, unweighted] is Vertex-
+// lineage convention, confirmed against the SDK's EngineServerSubaccountInfoState type.
+export function deriveAccountSummary(info: SubaccountInfoResponse, positions: OpenPosition[]): AccountSummary {
+  const [initial, maintenance, unweighted] = info.healths;
+  const equityUsd = fromX18(unweighted.health);
+  const maintenanceHealthUsd = fromX18(maintenance.health);
+  const marginRatioPct =
+    equityUsd > 0 ? Math.max(0, Math.min(100, (1 - maintenanceHealthUsd / equityUsd) * 100)) : equityUsd < 0 ? 100 : 0;
+
+  return {
+    equityUsd,
+    availableMarginUsd: Math.max(0, fromX18(initial.health)),
+    marginRatioPct,
+    unrealizedPnlUsd: positions.reduce((sum, p) => sum + p.unrealizedPnlUsd, 0),
+  };
+}
+
+type SymbolsResponse = { symbols: Record<string, { product_id: number; symbol: string }> };
+
+// Product-id → ticker, for every Nado market (not just BTC/ETH) — needed here because a real
+// account's positions/trades can be in any of Nado's ~90 products, and silently hiding or
+// mislabeling a position because it isn't in `KNOWN_PRODUCTS` would misrepresent a user's real
+// money, unlike the market-list page where showing fewer markets is just an incomplete feature.
+export async function getSymbolMap(): Promise<Map<number, string>> {
+  const { symbols } = await nadoQuery<SymbolsResponse>("symbols");
+  return new Map(Object.values(symbols).map((s) => [s.product_id, s.symbol]));
+}

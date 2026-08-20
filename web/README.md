@@ -12,7 +12,10 @@ Next.js (App Router) + Tailwind CSS v4 + wagmi/viem for wallet connection and or
   BTC-PERP/ETH-PERP specifically: a real order-entry form, a fully live header and stats row
   (price, 24h change, 24h volume, open interest, funding rate), a live hourly candlestick chart,
   and a live recent-trades tape. Other markets fall back to sample chart/stats/trades.
-- **`/portfolio`** — account view: equity/margin summary, open positions, trade history.
+- **`/portfolio`** — the connected wallet's real Nado account: equity, available margin, margin
+  ratio, unrealized PnL, open positions, and fill history. Nothing here is sample data — if
+  there's no wallet connected, or the connected wallet has no Nado account yet, the page says so
+  rather than showing a placeholder account.
 - **`/vault`** — mint/burn Nado's own native liquidity vault (NLP) — not a Mimic product,
   reached directly through Nado's gateway.
 
@@ -29,28 +32,36 @@ src/
     terminal/                 # MarketsTable, CandlestickChart, LiveCandlestickChart, TradesTable,
                                # LiveTradesTable, OrderForm, NlpVaultForm, LiveMarketPanel,
                                # BetaTradingWarning, SideBadge, SampleDataBanner
+    portfolio/                 # PortfolioView (the /portfolio page body), AccountSummaryLink
+                                # (the homepage "Your account" card) — both real, both client
     Navbar.tsx, Footer.tsx, ConnectButton.tsx, Providers.tsx
   lib/
     markets.ts                 # sample market list + deterministic candle/fill generation
-    portfolio.ts                # sample account summary, positions, trade history
     format.ts                   # shared formatters (USD, price, pct, date/time)
     wagmi.ts                    # wagmi config — Ink mainnet (chain 57073), injected connector
     nado/
       config.ts                 # real gateway + indexer endpoints, chain ID, verified addresses
       eip712.ts                 # order/MintNlp/BurnNlp signing domains, types, subaccount encoding
-      client.ts                 # query()/execute() against the real gateway (GET-based)
+      client.ts                 # query()/execute() against the real gateway (POST-based)
       indexer.ts                 # funding_rate / market_snapshots / candlesticks /
-                                  # matches_and_liquidations against the real archive service
-                                  # (POST-based — a different wire format from client.ts)
+                                  # matches_and_liquidations / account trade history against the
+                                  # real archive service (POST — a different wire format from
+                                  # client.ts, to a different host)
+      account.ts                 # subaccount_info + the position/equity/margin math derived
+                                  # from it, and the symbols query (product_id → ticker)
       useLiveMarket.ts           # combines gateway + indexer into one hook: price, OI, funding,
                                   # 24h vol/change
       useLiveChart.ts             # candlestick history + recent-trades tape, each its own hook
+      usePortfolio.ts             # subaccount_info + trade history + symbols, combined, for the
+                                   # connected wallet
 ```
 
 ## Sample data vs. real integration — two different things here
 
-`lib/markets.ts` and `lib/portfolio.ts` are still sample data (no historical/24h/volume feed was
-verified — see below), clearly labeled as such (`SampleDataBanner`) on every page that uses them.
+`lib/markets.ts` is still sample data for markets other than BTC-PERP/ETH-PERP (no historical/
+24h/volume feed was verified for them — see below), clearly labeled as such (`SampleDataBanner`)
+on every page that uses it. The account/portfolio data (`lib/nado/account.ts`, `usePortfolio.ts`)
+is real for any connected wallet, in any market — see its own section below.
 
 `lib/nado/` is **real, and targets mainnet**: verified against Nado's actual TypeScript SDK
 ([nadohq/nado-typescript-sdk](https://github.com/nadohq/nado-typescript-sdk)) and live-tested
@@ -112,6 +123,36 @@ sign → submit → real-API-response path genuinely works end to end, not just 
 `OrderForm` and `NlpVaultForm` both carry a `BetaTradingWarning` making clear that mint/burn in
 particular has not been round-tripped the same way, and suggesting a small size to start — the
 honesty boundary lives in the UI, not just in this file.
+
+`/portfolio` and the homepage's "Your account" card are real for any connected wallet, from the
+gateway's `subaccount_info` query plus the indexer's `matches` query — both confirmed against
+Nado's SDK source (`EngineQueryClient.getSubaccountSummary()`, `IndexerBaseClient.getMatchEvents()`)
+and cross-checked against a real active account's live response. `subaccount_info` returns
+everything needed in one call: spot/perp balances, live oracle prices for every product the
+account holds, and three pre-weighted `{assets, liabilities, health}` groups (`[initial,
+maintenance, unweighted]`, Vertex-lineage convention) the engine itself computes from those
+balances using each product's risk weights — equity is read directly from the unweighted group
+rather than re-deriving Nado's own risk-weighting logic. Per-position entry price and unrealized
+PnL use the SDK's own formula (`calcPerpBalanceValue`): `unrealizedPnl = amount * oraclePrice +
+vQuoteBalance`, `entryPrice = -vQuoteBalance / amount` — verified against a real position where
+`spotBalance + unrealizedPnl` matched the engine's own equity figure to the cent. Trade history
+joins the indexer's `matches` (filtered by `subaccounts: [hex]`) against its sibling `txs` array
+for real timestamps, the same pattern used for the market-wide recent-trades tape, but keeping
+every row (not just the taker leg) since each one is this account's own distinct fill; realized
+PnL comes straight from the protocol's own `realized_pnl` field per fill, not recomputed.
+
+Every position and trade is labeled with a real ticker via the gateway's `symbols` query — a
+product-id → name map, and (unlike the market-list page) *not optional* here: this is real
+account data, and silently hiding or mislabeling a position outside `KNOWN_PRODUCTS` would
+misrepresent a user's actual money, not just show an incomplete market list. One known gap:
+`subaccount_info`'s balances appear to be the cross-margin bucket only — isolated positions
+(there's a separate `isolated_positions` query type, not wired up) aren't shown, disclosed
+directly under "Open positions" in the UI rather than silently omitted.
+
+One correction along the way: gateway queries that take parameters (`subaccount_info`) turned out
+to need POST `{type, ...params}` to `/query`, not the GET-with-querystring form `client.ts`
+previously used for the zero-param `all_products` case — GET happened to also work live, but POST
+is what Nado's own SDK actually sends, so `nadoQuery` now does that uniformly for every query.
 
 The candle/fill generators in `lib/markets.ts` — still used for every market other than
 BTC-PERP/ETH-PERP — use a seeded PRNG (`mulberry32`), not `Math.random()` or `Date.now()` —

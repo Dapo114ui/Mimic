@@ -134,3 +134,61 @@ export async function getRecentTrades(productId: number, limit = 40): Promise<Fi
     })
     .sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
 }
+
+export type AccountTrade = {
+  market: string;
+  side: "Long" | "Short";
+  sizeUsd: number;
+  pnlUsd: number;
+  pnlPct: number;
+  closedAt: string;
+};
+
+type AccountMatchRow = {
+  base_filled: string;
+  quote_filled: string;
+  realized_pnl: string;
+  submission_idx: string;
+  post_balance: { base: { perp: { product_id: number } } | null };
+};
+
+type MatchesResponse = { matches: AccountMatchRow[]; txs: TxRow[] };
+
+// One specific account's fill history — the market-wide `getRecentTrades` above keeps only the
+// taker leg per trade (to dedupe two rows into one), but here every row IS this account's own
+// distinct fill (as maker or taker), so all of them are kept. `realized_pnl` comes straight from
+// the protocol's own accounting per fill — not recomputed here — and product/market comes from
+// `post_balance.base.perp.product_id`, the same field Nado's own SDK derives it from
+// (`IndexerBaseClient.getMatchEvents`), since match rows carry no direct product_id field.
+export async function getAccountTradeHistory(
+  subaccountHex: string,
+  symbolMap: Map<number, string>,
+  limit = 30
+): Promise<AccountTrade[]> {
+  const { matches, txs } = await nadoIndexerQuery<MatchesResponse>("matches", {
+    subaccounts: [subaccountHex],
+    limit,
+  });
+
+  const timestampByIdx = new Map(txs.map((tx) => [tx.submission_idx, Number(tx.timestamp)]));
+
+  return matches
+    .filter((m) => m.post_balance.base?.perp && timestampByIdx.has(m.submission_idx))
+    .map((m) => {
+      const baseFilled = Number(BigInt(m.base_filled)) / 1e18;
+      const quoteFilled = Number(BigInt(m.quote_filled)) / 1e18;
+      const realizedPnl = Number(BigInt(m.realized_pnl)) / 1e18;
+      const productId = m.post_balance.base!.perp.product_id;
+      const ts = timestampByIdx.get(m.submission_idx)!;
+      const notional = Math.abs(quoteFilled);
+      return {
+        market: symbolMap.get(productId) ?? `Product #${productId}`,
+        side: baseFilled >= 0 ? ("Long" as const) : ("Short" as const),
+        sizeUsd: notional,
+        pnlUsd: realizedPnl,
+        pnlPct: notional > 0 ? (realizedPnl / notional) * 100 : 0,
+        closedAt: new Date(ts * 1000).toISOString(),
+      };
+    })
+    .sort((a, b) => (a.closedAt < b.closedAt ? 1 : -1));
+}
