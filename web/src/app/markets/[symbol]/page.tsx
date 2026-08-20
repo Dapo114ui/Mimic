@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getAllMarkets, getCandles, getMarketBySymbol, getRecentFills } from "@/lib/markets";
-import { formatDateTime, formatFundingRate, formatPrice, formatSignedPct, formatUsd } from "@/lib/format";
+import { formatFundingRate, formatPrice, formatSignedPct, formatUsd } from "@/lib/format";
 import { KNOWN_PRODUCTS } from "@/lib/nado/config";
 import { CandlestickChart } from "@/components/terminal/CandlestickChart";
-import { SideBadge } from "@/components/terminal/SideBadge";
+import { LiveCandlestickChart } from "@/components/terminal/LiveCandlestickChart";
+import { TradesTable } from "@/components/terminal/TradesTable";
+import { LiveTradesTable } from "@/components/terminal/LiveTradesTable";
 import { SampleDataBanner } from "@/components/terminal/SampleDataBanner";
 import { LiveMarketHeader, LiveMarketStats } from "@/components/terminal/LiveMarketPanel";
 import { OrderForm } from "@/components/terminal/OrderForm";
@@ -38,9 +40,7 @@ export default async function MarketDetailPage({ params }: PageProps<"/markets/[
 
         <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <SampleDataBanner>
-              {productId !== undefined ? "Chart & recent trades are sample data" : "Sample chart & stats"}
-            </SampleDataBanner>
+            {productId === undefined && <SampleDataBanner>Sample chart & stats</SampleDataBanner>}
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
               {market.symbol}
             </h1>
@@ -59,7 +59,11 @@ export default async function MarketDetailPage({ params }: PageProps<"/markets/[
         </div>
 
         <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-          <CandlestickChart candles={candles} />
+          {productId !== undefined ? (
+            <LiveCandlestickChart productId={productId} />
+          ) : (
+            <CandlestickChart candles={candles} />
+          )}
         </div>
 
         <div className="mt-8">
@@ -87,36 +91,7 @@ export default async function MarketDetailPage({ params }: PageProps<"/markets/[
 
         <section className="mt-10">
           <h2 className="text-lg font-medium text-foreground">Recent trades</h2>
-          <div className="mt-3 overflow-x-auto rounded-2xl border border-white/10">
-            <table className="w-full min-w-[480px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-mist-dim">
-                  <th className="px-5 py-3 font-medium">Side</th>
-                  <th className="px-5 py-3 text-right font-medium">Price</th>
-                  <th className="px-5 py-3 text-right font-medium">Size</th>
-                  <th className="px-5 py-3 text-right font-medium">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fills.map((fill, i) => (
-                  <tr key={i} className="border-b border-white/5 last:border-0">
-                    <td className="px-5 py-3 align-middle">
-                      <SideBadge side={fill.side} />
-                    </td>
-                    <td className="px-5 py-3 text-right align-middle font-mono text-mist">
-                      ${formatPrice(fill.price)}
-                    </td>
-                    <td className="px-5 py-3 text-right align-middle font-mono text-mist">
-                      {formatUsd(fill.sizeUsd)}
-                    </td>
-                    <td className="px-5 py-3 text-right align-middle text-xs text-mist-dim">
-                      {formatDateTime(fill.timestamp)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {productId !== undefined ? <LiveTradesTable productId={productId} /> : <TradesTable fills={fills} />}
         </section>
       </div>
     </div>

@@ -8,9 +8,10 @@ Next.js (App Router) + Tailwind CSS v4 + wagmi/viem for wallet connection and or
 
 - **`/`** — market watchlist: price, 24h change, volume, funding rate, open interest across
   Nado's perp markets, sortable. Links into `/portfolio`.
-- **`/markets/[symbol]`** — one market: candlestick chart and a recent-fills tape (both sample
-  data), and for BTC-PERP/ETH-PERP specifically: a real order-entry form plus a fully live
-  header and stats row (price, 24h change, 24h volume, open interest, funding rate).
+- **`/markets/[symbol]`** — one market: candlestick chart and a recent-trades tape, and for
+  BTC-PERP/ETH-PERP specifically: a real order-entry form, a fully live header and stats row
+  (price, 24h change, 24h volume, open interest, funding rate), a live hourly candlestick chart,
+  and a live recent-trades tape. Other markets fall back to sample chart/stats/trades.
 - **`/portfolio`** — account view: equity/margin summary, open positions, trade history.
 - **`/vault`** — mint/burn Nado's own native liquidity vault (NLP) — not a Mimic product,
   reached directly through Nado's gateway.
@@ -25,8 +26,9 @@ src/
     portfolio/                # account view
     vault/                     # NLP mint/burn
   components/
-    terminal/                 # MarketsTable, CandlestickChart, OrderForm, NlpVaultForm,
-                               # LivePriceBadge, BetaTradingWarning, SideBadge, SampleDataBanner
+    terminal/                 # MarketsTable, CandlestickChart, LiveCandlestickChart, TradesTable,
+                               # LiveTradesTable, OrderForm, NlpVaultForm, LiveMarketPanel,
+                               # BetaTradingWarning, SideBadge, SampleDataBanner
     Navbar.tsx, Footer.tsx, ConnectButton.tsx, Providers.tsx
   lib/
     markets.ts                 # sample market list + deterministic candle/fill generation
@@ -37,9 +39,12 @@ src/
       config.ts                 # real gateway + indexer endpoints, chain ID, verified addresses
       eip712.ts                 # order/MintNlp/BurnNlp signing domains, types, subaccount encoding
       client.ts                 # query()/execute() against the real gateway (GET-based)
-      indexer.ts                 # funding_rate / market_snapshots against the real archive
-                                  # service (POST-based — a different wire format from client.ts)
-      useLiveMarket.ts           # combines both into one hook: price, OI, funding, 24h vol/change
+      indexer.ts                 # funding_rate / market_snapshots / candlesticks /
+                                  # matches_and_liquidations against the real archive service
+                                  # (POST-based — a different wire format from client.ts)
+      useLiveMarket.ts           # combines gateway + indexer into one hook: price, OI, funding,
+                                  # 24h vol/change
+      useLiveChart.ts             # candlestick history + recent-trades tape, each its own hook
 ```
 
 ## Sample data vs. real integration — two different things here
@@ -75,6 +80,27 @@ price change matched an actual ~7.5%/~18% BTC/ETH move that happened during this
 the resulting 24h volume figures ($436M BTC, $114M ETH) are the right order of magnitude for an
 active perp market.
 
+The candlestick chart and recent-trades tape are real too, for BTC-PERP/ETH-PERP, from the same
+archive service. `candlesticks` (`product_id`, `granularity` in seconds) returns a fixed window
+of ~100 recent buckets, newest first — there's no count/range parameter (a `limit` field is
+silently ignored), so this is hourly, ~4 days back, reversed to the ascending order chart
+libraries expect. Recent trades come from `matches_and_liquidations` (`product_ids` — plural
+array, confirmed against the SDK's own `IndexerServerMatchEventsParams` type after an initial
+probe with the singular `product_id` silently matched nothing): its `matches` array has one row
+per side of a fill (taker + maker) with real fill amounts but no wall-clock time, and its sibling
+`txs` array has one row per trade with a real unix timestamp — joined by `submission_idx`, the
+same pattern Nado's own SDK uses internally (`IndexerBaseClient.getMatchEvents`). Only the taker
+leg is kept per trade, since a trade tape shows one row per trade, not per side; price is
+`|quote_filled / base_filled|` rather than the order's `priceX18`, to reflect what the fill
+actually cleared at. Verified by replicating this exact logic against live captured responses:
+ascending/descending ordering held, all OHLC bars satisfied `high ≥ max(open,close)` and
+`low ≤ min(open,close)`, computed BTC trade prices landed in a sane $50–90k band, and every
+trade's derived timestamp fell within the last few minutes of a live request — matching what an
+active order book actually looks like. (The sandbox's headless Chromium can't reach either Nado
+service through this environment's outbound proxy — confirmed again here, now for GET as well as
+POST — so this was validated by replicating the browser-side logic in Node against live captured
+JSON rather than an actual rendered screenshot; `npm run build`/`eslint` are clean.)
+
 The order `appendix` bitfield and default subaccount encoding — the two riskiest unknowns when
 this only targeted testnet — are backed by Nado/Vertex-family documentation: `appendix = 0`
 decodes to version 0, not isolated, order type 0 (DEFAULT/standard limit), not reduce-only, no
@@ -87,10 +113,13 @@ sign → submit → real-API-response path genuinely works end to end, not just 
 particular has not been round-tripped the same way, and suggesting a small size to start — the
 honesty boundary lives in the UI, not just in this file.
 
-The candle/fill generators in `lib/markets.ts` use a seeded PRNG (`mulberry32`), not
-`Math.random()` or `Date.now()` — deterministic output is required here, not just nice-to-have:
-anything render-time-dependent produces different values during SSR vs. hydration and throws a
-React hydration-mismatch error. `formatDateTime` pins `timeZone: "UTC"` for the same reason.
+The candle/fill generators in `lib/markets.ts` — still used for every market other than
+BTC-PERP/ETH-PERP — use a seeded PRNG (`mulberry32`), not `Math.random()` or `Date.now()` —
+deterministic output is required here, not just nice-to-have: anything render-time-dependent
+produces different values during SSR vs. hydration and throws a React hydration-mismatch error.
+`formatDateTime` pins `timeZone: "UTC"` for the same reason. (This doesn't apply to the live
+Nado data: `useLiveMarket`/`useLiveChart` fetch client-side only, inside `"use client"`
+components, so there's no SSR render to mismatch against.)
 
 ## Usage
 

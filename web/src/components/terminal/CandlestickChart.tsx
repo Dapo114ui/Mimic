@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { CandlestickSeries, ColorType, createChart } from "lightweight-charts";
+import { CandlestickSeries, ColorType, createChart, type Time } from "lightweight-charts";
 import type { Candle } from "@/lib/markets";
 
 export function CandlestickChart({ candles }: { candles: Candle[] }) {
@@ -31,7 +31,9 @@ export function CandlestickChart({ candles }: { candles: Candle[] }) {
       wickDownColor: "#fb7185",
     });
 
-    series.setData(candles);
+    // `Candle.time` is a plain string | number; lightweight-charts wants its nominal `Time`
+    // type (UTCTimestamp is a branded number), hence the cast rather than a structural fit.
+    series.setData(candles.map((c) => ({ ...c, time: c.time as unknown as Time })));
     chart.timeScale().fitContent();
 
     const handleResize = () => chart.applyOptions({ width: container.clientWidth });

@@ -14,7 +14,10 @@ export type Market = {
   openInterestUsd: number;
 };
 
-export type Candle = { time: string; open: number; high: number; low: number; close: number };
+// `time` is a UTC date string ("YYYY-MM-DD") for this file's daily sample candles, or a unix
+// second timestamp for live hourly candles (see `lib/nado/indexer.ts`) — lightweight-charts
+// accepts both, just not mixed within one series.
+export type Candle = { time: string | number; open: number; high: number; low: number; close: number };
 
 export type Fill = { side: "Long" | "Short"; price: number; sizeUsd: number; timestamp: string };
 
