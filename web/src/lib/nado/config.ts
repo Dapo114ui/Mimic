@@ -16,6 +16,12 @@ export const NADO_CHAIN_ID = 57073; // Ink mainnet
 export const NADO_GATEWAY_REST = "https://gateway.prod.nado.xyz/v1";
 export const NADO_GATEWAY_WS = "wss://gateway.prod.nado.xyz/v1/ws";
 
+// The archive (indexer) service — historical/aggregate data the low-latency gateway above
+// doesn't have (24h volume, price history, a computed funding rate). Verified live: CORS is
+// open here too, `funding_rate` returns a real per-product rate, and `market_snapshots`'
+// oracle prices track the gateway's live price within fractions of a percent.
+export const NADO_INDEXER_REST = "https://archive.prod.nado.xyz/v1";
+
 // The "endpoint" (sequencer) contract — the EIP-712 verifying contract for every execute
 // EXCEPT place_order/cancel_orders, which instead verify against address(productId).
 export const NADO_ENDPOINT_CONTRACT = "0x05ec92D78ED421f3D3Ada77FFdE167106565974E" as const;

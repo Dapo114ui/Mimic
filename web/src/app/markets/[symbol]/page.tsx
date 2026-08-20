@@ -6,7 +6,7 @@ import { KNOWN_PRODUCTS } from "@/lib/nado/config";
 import { CandlestickChart } from "@/components/terminal/CandlestickChart";
 import { SideBadge } from "@/components/terminal/SideBadge";
 import { SampleDataBanner } from "@/components/terminal/SampleDataBanner";
-import { LivePriceBadge } from "@/components/terminal/LivePriceBadge";
+import { LiveMarketHeader, LiveMarketStats } from "@/components/terminal/LiveMarketPanel";
 import { OrderForm } from "@/components/terminal/OrderForm";
 
 export function generateStaticParams() {
@@ -38,31 +38,40 @@ export default async function MarketDetailPage({ params }: PageProps<"/markets/[
 
         <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <SampleDataBanner>Sample chart &amp; stats</SampleDataBanner>
-              {productId !== undefined && <LivePriceBadge productId={productId} />}
-            </div>
+            <SampleDataBanner>
+              {productId !== undefined ? "Chart & recent trades are sample data" : "Sample chart & stats"}
+            </SampleDataBanner>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
               {market.symbol}
             </h1>
             <p className="mt-1 text-sm text-mist-dim">{market.name}</p>
           </div>
-          <div className="self-start text-right">
-            <p className="font-mono text-3xl font-medium text-foreground">${formatPrice(market.price)}</p>
-            <p className={`mt-1 font-mono text-sm font-medium ${isUp ? "text-emerald-400" : "text-rose-400"}`}>
-              {formatSignedPct(market.change24hPct)} 24h
-            </p>
-          </div>
+          {productId !== undefined ? (
+            <LiveMarketHeader productId={productId} />
+          ) : (
+            <div className="self-start text-right">
+              <p className="font-mono text-3xl font-medium text-foreground">${formatPrice(market.price)}</p>
+              <p className={`mt-1 font-mono text-sm font-medium ${isUp ? "text-emerald-400" : "text-rose-400"}`}>
+                {formatSignedPct(market.change24hPct)} 24h
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
           <CandlestickChart candles={candles} />
         </div>
 
-        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Stat label="24h volume" value={formatUsd(market.volume24hUsd)} />
-          <Stat label="Open interest" value={formatUsd(market.openInterestUsd)} />
-          <Stat label="Funding (8h)" value={formatFundingRate(market.fundingRatePct)} />
+        <div className="mt-8">
+          {productId !== undefined ? (
+            <LiveMarketStats productId={productId} />
+          ) : (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <Stat label="24h volume" value={formatUsd(market.volume24hUsd)} />
+              <Stat label="Open interest" value={formatUsd(market.openInterestUsd)} />
+              <Stat label="Funding rate" value={formatFundingRate(market.fundingRatePct)} />
+            </div>
+          )}
         </div>
 
         {productId !== undefined ? (
