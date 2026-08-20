@@ -14,11 +14,11 @@ export function BetaTradingWarning({ context = "order" }: { context?: "order" | 
           </>
         ) : (
           <>
-            A real mint attempt against this exact code hit a wire-format bug (the request body
-            needed a nested <code>tx</code> field this code wasn&apos;t sending, so the gateway
-            rejected it before ever checking the signature) — since fixed, but that means mint/
-            burn hasn&apos;t completed a full round trip yet at all, not even against the wrong
-            subaccount like orders had.
+            Mint is confirmed working end to end — a real mint against a funded account went
+            through and the gateway accepted it, after two real bugs surfaced and got fixed along
+            the way (a missing <code>tx</code> wrapper, then a wrong nonce scheme). Burn uses the
+            identical signing/submission path and should work the same way, but hasn&apos;t been
+            separately tested yet.
           </>
         )}{" "}
         Start with a small size and double-check what you&apos;re signing before confirming.

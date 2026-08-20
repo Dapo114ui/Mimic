@@ -211,9 +211,13 @@ sequential counter (0, 1, 2, ...) required by every execute that wraps its paylo
 object. `NlpVaultForm` was generating a timestamp-shaped nonce for a field that needed to equal
 the account's current `tx_nonce` exactly — fixed by fetching it fresh from `nonces`
 (`account.ts`'s `getTxNonce`) immediately before signing, rather than generating one.
-`BetaTradingWarning` still says, in the vault context, that mint/burn hasn't completed a real
-round trip yet — accurate as of this fix, since the on-chain nonce rejection is exactly what
-proves it hasn't.
+
+With both fixes live, a real mint against a real funded account went through — the gateway
+accepted it, no error, `nadoExecute` resolved successfully. Mint is confirmed working end to end,
+not just mechanically. Burn hasn't been separately tested, but shares the identical `tx`-object
+payload shape and the same `tx_nonce` fetch, so there's no known reason it would behave
+differently — `BetaTradingWarning`'s vault copy reflects exactly this asymmetry (mint confirmed,
+burn not yet tested but expected to work the same way).
 
 One correction from before that: gateway queries that take parameters (`subaccount_info`) turned
 out to need POST `{type, ...params}` to `/query`, not the GET-with-querystring form `client.ts`
