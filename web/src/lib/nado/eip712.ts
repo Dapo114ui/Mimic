@@ -72,9 +72,13 @@ export const BURN_NLP_TYPES = {
   ],
 } as const;
 
-// Best-effort: a plain increasing uint64 (ms timestamp * 1000 + jitter). Not verified against
-// Nado's actual nonce-uniqueness/replay rules — only called from click handlers, never during
-// render, so there's no SSR/hydration determinism concern here.
+// For ORDER nonces only — confirmed (via the gateway's `nonces` query, which returns two
+// independent counters per owner address) that `order_nonce` really is a large, timestamp-shaped
+// value, so "any value greater than last used" generation like this works. `tx_nonce` — used by
+// mint_nlp/burn_nlp and anything else that wraps its payload in a `tx` object — is a small,
+// strictly-sequential counter instead and must be read fresh from that query
+// (`account.ts`'s `getTxNonce`), not generated; using this function for that class of execute is
+// exactly the bug a real mint_nlp attempt hit ("Invalid nonce: expected: 0").
 export function generateNonce(): bigint {
   return BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000));
 }

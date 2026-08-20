@@ -37,6 +37,22 @@ export async function getSubaccountInfo(owner: Address): Promise<SubaccountInfoR
   return nadoQuery<SubaccountInfoResponse>("subaccount_info", { subaccount });
 }
 
+type NoncesResponse = { tx_nonce: string; order_nonce: string };
+
+// Nado has two independent nonce counters per owner address (not per subaccount — confirmed by
+// this query's own param, `address`, a plain 20-byte address, unlike every other account query
+// here which takes an encoded 32-byte subaccount): `order_nonce`, a large timestamp-shaped value
+// place_order already generates correctly (any greater value than last-used works), and
+// `tx_nonce`, a small strictly-sequential counter (0, 1, 2, ...) required by every execute that
+// wraps its payload in a `tx` object (mint_nlp, burn_nlp, ...). Discovered after a real mint_nlp
+// attempt against a funded account was rejected on-chain with "Invalid nonce: expected: 0" —
+// generateNonce()'s timestamp-based value is wrong for this class of execute; the correct value
+// has to be read from here immediately before signing.
+export async function getTxNonce(owner: Address): Promise<bigint> {
+  const { tx_nonce } = await nadoQuery<NoncesResponse>("nonces", { address: owner });
+  return BigInt(tx_nonce);
+}
+
 export type AccountSummary = {
   equityUsd: number;
   availableMarginUsd: number;

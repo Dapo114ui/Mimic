@@ -2,8 +2,9 @@
 
 import { type FormEvent, useState } from "react";
 import { useAccount, useSignTypedData } from "wagmi";
-import { BURN_NLP_TYPES, encodeSubaccount, generateNonce, getEndpointDomain, MINT_NLP_TYPES } from "@/lib/nado/eip712";
+import { BURN_NLP_TYPES, encodeSubaccount, getEndpointDomain, MINT_NLP_TYPES } from "@/lib/nado/eip712";
 import { nadoExecute } from "@/lib/nado/client";
+import { getTxNonce } from "@/lib/nado/account";
 import { BetaTradingWarning } from "./BetaTradingWarning";
 
 type Mode = "mint" | "burn";
@@ -36,7 +37,10 @@ export function NlpVaultForm() {
     try {
       const sender = encodeSubaccount(address);
       const scaledAmount = BigInt(Math.round(amountNum * 1e18));
-      const nonce = generateNonce();
+      // mint_nlp/burn_nlp use the strictly-sequential tx_nonce, not the timestamp-based nonce
+      // orders use — fetched fresh right before signing since it's a "must equal exactly" value,
+      // not just "must be greater than last used".
+      const nonce = await getTxNonce(address);
       const domain = getEndpointDomain();
 
       if (mode === "mint") {

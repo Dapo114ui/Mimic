@@ -184,23 +184,36 @@ deliberately *not* shown: an APR. The SDK's own depositor-APY formula needs a pr
 constant that has zero call sites anywhere in the codebase — there's no reliable source for it,
 so it's omitted rather than guessed at for something tied to a real mint/burn decision.
 
-Two corrections along the way, both found by an actual real-money mint attempt against a funded
-account. First, `nadoExecute`/`nadoQuery` called `res.json()` unconditionally — but not every
-gateway error is the `{status:"failure",...}` JSON envelope; a malformed payload gets a plain-text
-4xx body instead (e.g. "Failed to deserialize..."), and `res.json()` on that throws an opaque
-"Unexpected token" `SyntaxError` that hides the real message. Fixed to read the body as text first
-and only parse it as JSON if it looks like JSON. Second — the actual real bug that error handling
-had been hiding: `mint_nlp`/`burn_nlp`'s execute payload needs `{tx: {sender, quoteAmount, nonce},
-signature}`, a nested `tx` object, not the flat `{sender, quoteAmount, nonce, signature}` the code
-was sending — discovered the same empirical way as everything else in this file (probe with a
-deliberately incomplete body, follow the "missing field" errors one at a time), then confirmed
-against the live gateway by sending a full payload with a dummy signature and getting all the way
-to a real, well-formed `"malformed signature"` rejection instead of a deserialize error. This is
-the reason a real test mint got the opaque JSON-parse error above, not a real gateway response —
-`place_order`'s shape was already correct (it round-tripped successfully earlier), so this is a
-`mint_nlp`/`burn_nlp`-specific fix, and `BetaTradingWarning` now says explicitly, in the vault
-context, that mint/burn hasn't completed a real round trip yet at all, not even against the wrong
-subaccount the way orders had.
+Three corrections along the way, all found by a real-money mint attempt against a funded account —
+two bugs stacked, and fixing the first is what surfaced the second. First, `nadoExecute`/
+`nadoQuery` called `res.json()` unconditionally — but not every gateway error is the
+`{status:"failure",...}` JSON envelope; a malformed payload gets a plain-text 4xx body instead
+(e.g. "Failed to deserialize..."), and `res.json()` on that throws an opaque "Unexpected token"
+`SyntaxError` that hides the real message. Fixed to read the body as text first and only parse it
+as JSON if it looks like JSON.
+
+Second, the bug that error handling had been hiding: `mint_nlp`/`burn_nlp`'s execute payload needs
+`{tx: {sender, quoteAmount, nonce}, signature}`, a nested `tx` object, not the flat `{sender,
+quoteAmount, nonce, signature}` the code was sending — discovered the same empirical way as
+everything else in this file (probe with a deliberately incomplete body, follow the "missing
+field" errors one at a time), confirmed against the live gateway by sending a full payload with a
+dummy signature and getting all the way to a real, well-formed `"malformed signature"` rejection
+instead of a deserialize error. `place_order`'s shape was already correct (it round-tripped
+successfully earlier), so this was `mint_nlp`/`burn_nlp`-specific.
+
+Third — with the payload shape fixed, a real mint attempt against a funded account got past
+signature validation and reached a real on-chain rejection: `"Invalid nonce: expected: 0"`. The
+gateway's `nonces` query (param `address` — the plain 20-byte owner address, not an encoded
+subaccount, unlike every other account query here) returns *two* independent counters per owner:
+`order_nonce`, a large timestamp-shaped value where "anything greater than last used" is valid
+(what `generateNonce()`/`place_order` already correctly does), and `tx_nonce`, a small strictly-
+sequential counter (0, 1, 2, ...) required by every execute that wraps its payload in a `tx`
+object. `NlpVaultForm` was generating a timestamp-shaped nonce for a field that needed to equal
+the account's current `tx_nonce` exactly — fixed by fetching it fresh from `nonces`
+(`account.ts`'s `getTxNonce`) immediately before signing, rather than generating one.
+`BetaTradingWarning` still says, in the vault context, that mint/burn hasn't completed a real
+round trip yet — accurate as of this fix, since the on-chain nonce rejection is exactly what
+proves it hasn't.
 
 One correction from before that: gateway queries that take parameters (`subaccount_info`) turned
 out to need POST `{type, ...params}` to `/query`, not the GET-with-querystring form `client.ts`
