@@ -164,3 +164,34 @@ export function deriveNlpBalance(info: SubaccountInfoResponse): number {
   const balance = info.spot_balances.find((b) => b.product_id === NLP_PRODUCT_ID);
   return balance ? fromX18(balance.balance.amount) : 0;
 }
+
+type NlpBalanceEntry = { product_id: number; balance: { amount: string } };
+type NlpLockEntry = { balance: NlpBalanceEntry; unlocked_at: number };
+type NlpLockedBalancesResponse = {
+  balance_locked: NlpBalanceEntry;
+  balance_unlocked: NlpBalanceEntry;
+  locked_balances: NlpLockEntry[];
+};
+
+export type NlpLock = { amount: number; unlocksAt: string };
+export type NlpLockStatus = { lockedAmount: number; unlockedAmount: number; locks: NlpLock[] };
+
+// Real cooldown after minting: a real burn attempt against a real, fully-minted balance was
+// rejected with "Do not have enough unlocked NLP" even though the requested amount was well
+// within the total held — `nlp_locked_balances` (param `subaccount`, the encoded 32-byte form,
+// unlike `nonces`) is what actually explains that: newly-minted NLP sits in `locked_balances`
+// with its own per-mint `unlocked_at` timestamp until a cooldown period passes, and only
+// `balance_unlocked` is actually burnable. Each mint gets its own lock entry, so `locks` is an
+// array, not a single date.
+export async function getNlpLockStatus(owner: Address): Promise<NlpLockStatus> {
+  const subaccount = encodeSubaccount(owner);
+  const data = await nadoQuery<NlpLockedBalancesResponse>("nlp_locked_balances", { subaccount });
+  return {
+    lockedAmount: fromX18(data.balance_locked.balance.amount),
+    unlockedAmount: fromX18(data.balance_unlocked.balance.amount),
+    locks: data.locked_balances.map((l) => ({
+      amount: fromX18(l.balance.balance.amount),
+      unlocksAt: new Date(l.unlocked_at * 1000).toISOString(),
+    })),
+  };
+}

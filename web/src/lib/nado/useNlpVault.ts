@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
-import { deriveNlpBalance, getNlpStats, getSubaccountInfo } from "./account";
+import { deriveNlpBalance, getNlpLockStatus, getNlpStats, getSubaccountInfo } from "./account";
 
 // NLP price/supply/TVL is protocol-wide — available with no wallet connected. Your own NLP
 // balance needs one, and shares its query key/cache with the portfolio page's subaccount lookup.
@@ -22,6 +22,14 @@ export function useNlpVault(address: Address | undefined) {
     refetchInterval: 10_000,
   });
 
+  const lockQuery = useQuery({
+    queryKey: ["nado-nlp-locked", address],
+    queryFn: () => getNlpLockStatus(address!),
+    enabled: !!address,
+    staleTime: 10_000,
+    refetchInterval: 30_000,
+  });
+
   return {
     stats: statsQuery.data ?? null,
     isStatsLoading: statsQuery.isLoading,
@@ -29,5 +37,8 @@ export function useNlpVault(address: Address | undefined) {
     yourBalance: infoQuery.data ? deriveNlpBalance(infoQuery.data) : null,
     isBalanceLoading: infoQuery.isLoading,
     isBalanceError: infoQuery.isError,
+    lockStatus: lockQuery.data ?? null,
+    isLockLoading: lockQuery.isLoading,
+    isLockError: lockQuery.isError,
   };
 }

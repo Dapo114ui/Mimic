@@ -58,7 +58,7 @@ src/
       usePortfolio.ts             # subaccount_info + trade history + symbols, combined, for the
                                    # connected wallet
       useNlpVault.ts               # NLP price/supply/TVL (no wallet needed) + your own balance
-                                    # (needs one), for the /vault page
+                                    # and locked/unlocked breakdown (needs one), for /vault
 ```
 
 ## Sample data vs. real integration — two different things here
@@ -218,6 +218,15 @@ not just mechanically. Burn hasn't been separately tested, but shares the identi
 payload shape and the same `tx_nonce` fetch, so there's no known reason it would behave
 differently — `BetaTradingWarning`'s vault copy reflects exactly this asymmetry (mint confirmed,
 burn not yet tested but expected to work the same way).
+
+A real burn attempt straight after that mint surfaced one more real (non-bug) behavior: it was
+rejected with `"Do not have enough unlocked NLP"` even for an amount within the account's total
+balance. `nlp_locked_balances` (param `subaccount`, the encoded form — unlike `nonces`, which
+takes the plain address) explains why: newly-minted NLP sits locked with its own per-mint
+`unlocked_at` cooldown timestamp, and only `balance_unlocked` is actually burnable — confirmed
+against the real account, whose entire freshly-minted balance was 100% locked with a ~4-day
+cooldown. `getNlpLockStatus` surfaces this on the vault page (`NlpVaultStats`) directly, so the
+same rejection doesn't have to happen again to find out why.
 
 One correction from before that: gateway queries that take parameters (`subaccount_info`) turned
 out to need POST `{type, ...params}` to `/query`, not the GET-with-querystring form `client.ts`

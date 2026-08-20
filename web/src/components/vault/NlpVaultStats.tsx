@@ -2,11 +2,20 @@
 
 import { useAccount } from "wagmi";
 import { useNlpVault } from "@/lib/nado/useNlpVault";
-import { formatPrice, formatUsd } from "@/lib/format";
+import { formatDateTime, formatPrice, formatUsd } from "@/lib/format";
 
 export function NlpVaultStats() {
   const { address, isConnected } = useAccount();
-  const { stats, isStatsLoading, isStatsError, yourBalance, isBalanceLoading, isBalanceError } = useNlpVault(address);
+  const {
+    stats,
+    isStatsLoading,
+    isStatsError,
+    yourBalance,
+    isBalanceLoading,
+    isBalanceError,
+    lockStatus,
+    isLockLoading,
+  } = useNlpVault(address);
 
   const price = isStatsLoading ? "…" : isStatsError || !stats ? "—" : `$${formatPrice(stats.priceUsd)}`;
   const supply = isStatsLoading ? "…" : isStatsError || !stats ? "—" : `${formatPrice(stats.totalSupply)} NLP`;
@@ -26,11 +35,34 @@ export function NlpVaultStats() {
       : null;
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-      <Stat label="NLP price" value={price} />
-      <Stat label="Total supply" value={supply} />
-      <Stat label="TVL" value={tvl} />
-      <Stat label="Your NLP balance" value={balanceValue} sub={balanceUsd} />
+    <div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <Stat label="NLP price" value={price} />
+        <Stat label="Total supply" value={supply} />
+        <Stat label="TVL" value={tvl} />
+        <Stat label="Your NLP balance" value={balanceValue} sub={balanceUsd} />
+      </div>
+
+      {isConnected && !isLockLoading && lockStatus && lockStatus.locks.length > 0 && (
+        <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm">
+          <p className="font-medium text-amber-300">
+            {formatPrice(lockStatus.lockedAmount)} NLP locked
+            {lockStatus.unlockedAmount > 0 && ` · ${formatPrice(lockStatus.unlockedAmount)} NLP unlocked`}
+          </p>
+          <p className="mt-1 text-amber-200/70">
+            Newly-minted NLP has a cooldown before it can be burned — only unlocked NLP can be
+            redeemed, one lock per mint:
+          </p>
+          <ul className="mt-2 space-y-1">
+            {lockStatus.locks.map((lock, i) => (
+              <li key={i} className="flex justify-between font-mono text-xs text-amber-200/70">
+                <span>{formatPrice(lock.amount)} NLP</span>
+                <span>unlocks {formatDateTime(lock.unlocksAt)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
