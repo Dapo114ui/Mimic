@@ -22,11 +22,13 @@ export function NlpVaultForm() {
   const [amount, setAmount] = useState("");
   const [status, setStatus] = useState<Status>({ type: "idle" });
 
+  const amountNum = Number(amount);
+  const isSmallMint = mode === "mint" && amountNum > 0 && amountNum < 20;
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!address) return;
 
-    const amountNum = Number(amount);
     if (!amountNum || amountNum <= 0) {
       setStatus({ type: "error", message: "Enter a valid amount" });
       return;
@@ -109,6 +111,19 @@ export function NlpVaultForm() {
             placeholder="0.00"
             className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-4 py-2.5 font-mono text-foreground outline-none focus:border-accent/50"
           />
+          {mode === "mint" && (
+            <p className="mt-1.5 text-xs text-mist-dim">
+              Nado charges a flat ~$1 fee per mint — negligible on a large deposit, but a real
+              chunk of a small one. The protocol minimum is $1, and minting exactly that nets you
+              close to nothing after the fee.
+            </p>
+          )}
+          {isSmallMint && (
+            <p className="mt-1.5 rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-amber-300">
+              At ${amountNum.toLocaleString()}, that ~$1 flat fee eats a large share of this
+              deposit. Consider minting more to make it worthwhile.
+            </p>
+          )}
         </label>
 
         {!isConnected ? (

@@ -228,6 +228,28 @@ against the real account, whose entire freshly-minted balance was 100% locked wi
 cooldown. `getNlpLockStatus` surfaces this on the vault page (`NlpVaultStats`) directly, so the
 same rejection doesn't have to happen again to find out why.
 
+That real $1 mint also surfaced a real cost worth calling out on its own: the account's quote
+balance dropped by $2.00 for a $1.00 mint, and its total equity (the engine's own figure, not a
+display artifact) dropped by $1.00 net. Pulled every `mint_nlp` event off the indexer across many
+different real accounts (`event_types: ["mint_nlp"]`, no `subaccounts` filter) to check whether
+this was account-specific — it wasn't: every real mint, from $1 to $20,000, has *exactly* $1.00
+deducted beyond the NLP's fair value, a flat fee, not a percentage (negligible at $20,000, 100% of
+the deposit at $1). `withdraw_fee_x18` — the config field that looked like the culprit, since its
+value happens to be exactly 1.0 in Nado's 18-decimal convention — turned out to be a red herring:
+confirmed against the SDK that it's decoded from the on-chain ABI but never actually consumed by
+the TypeScript client for anything, mint_nlp included (`packages/shared/src/abis/SpotEngine.ts`,
+`Querier.ts` — present in the raw struct, absent from `SpotProduct`, the SDK's own typed model).
+What the SDK does confirm: `$1` is the protocol's literal minimum mint amount
+(`MINT_NLP_AMOUNT_TOO_SMALL`, "below the 1 USDT0 minimum" —
+`packages/engine-client/src/types/engineErrorCodes.ts`) — the test mint hit that floor exactly,
+which is also almost exactly the flat fee, netting close to nothing. A separate, distinctly-named
+burn-side fee is confirmed to exist too (`BURN_NLP_AMOUNT_TOO_SMALL`, "amount is less than or
+equal to the burning fee") but its magnitude isn't exposed anywhere client-side — the actual fee
+formula for either direction lives in Solidity contracts outside this SDK's repo, unreachable from
+here. `NlpVaultForm` now warns in the mint flow: a persistent note that mint fees are flat (so
+size matters), and a stronger inline warning once the entered amount is small enough that ~$1
+would eat a meaningful share of it.
+
 One correction from before that: gateway queries that take parameters (`subaccount_info`) turned
 out to need POST `{type, ...params}` to `/query`, not the GET-with-querystring form `client.ts`
 previously used for the zero-param `all_products` case — GET happened to also work live, but POST
