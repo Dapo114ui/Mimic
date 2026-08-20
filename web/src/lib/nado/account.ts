@@ -1,6 +1,7 @@
 import type { Address } from "viem";
 import { nadoQuery } from "./client";
 import { encodeSubaccount } from "./eip712";
+import { NLP_PRODUCT_ID } from "./config";
 
 // Real per-subaccount state from the gateway (`subaccount_info`) — confirmed against
 // EngineQueryClient.getSubaccountSummary() in Nado's SDK (packages/engine-client/src). Every
@@ -16,6 +17,7 @@ type PerpBalance = {
 };
 
 type PerpProductInfo = { product_id: number; oracle_price_x18: string };
+type SpotBalance = { product_id: number; balance: { amount: string } };
 
 type HealthGroup = { assets: string; liabilities: string; health: string };
 
@@ -24,6 +26,7 @@ type SubaccountInfoResponse = {
   healths: [HealthGroup, HealthGroup, HealthGroup]; // [initial, maintenance, unweighted]
   perp_balances: PerpBalance[];
   perp_products: PerpProductInfo[];
+  spot_balances: SpotBalance[];
 };
 
 const X18 = 1e18;
@@ -105,4 +108,43 @@ type SymbolsResponse = { symbols: Record<string, { product_id: number; symbol: s
 export async function getSymbolMap(): Promise<Map<number, string>> {
   const { symbols } = await nadoQuery<SymbolsResponse>("symbols");
   return new Map(Object.values(symbols).map((s) => [s.product_id, s.symbol]));
+}
+
+type SpotProductInfo = {
+  product_id: number;
+  oracle_price_x18: string;
+  state: { total_deposits_normalized: string; cumulative_deposits_multiplier_x18: string };
+};
+
+type AllProductsResponse = { spot_products: SpotProductInfo[] };
+
+export type NlpStats = { priceUsd: number; totalSupply: number; totalValueUsd: number };
+
+// Total supply = normalized deposits × the deposit multiplier (a Compound-style exchange-rate
+// accumulator that starts at 1.0 and grows as the vault earns — same shape as every other Nado
+// spot-lending-market product, just reused for NLP's issuance accounting). Formula and NLP-price-
+// is-just-oracle_price_x18 both confirmed against the SDK's own `calcTotalDeposited`
+// (packages/shared/src/utils/interest.ts) and `mapEngineServerSpotProduct`
+// (packages/engine-client/src/utils/queryDataMappers.ts) — no NLP-specific price/supply helper
+// exists; NLP is mapped through the exact same generic spot-product path as any other product.
+// An APR figure is deliberately not shown: the SDK's own depositor-APY formula
+// (`calcRealizedDepositRateForTimeRange`) needs a protocol fee-share constant that has zero call
+// sites anywhere in the SDK — there's no reliable source for it here, so it's omitted rather
+// than guessed.
+export async function getNlpStats(): Promise<NlpStats> {
+  const { spot_products } = await nadoQuery<AllProductsResponse>("all_products");
+  const product = spot_products.find((p) => p.product_id === NLP_PRODUCT_ID);
+  if (!product) throw new Error("NLP product not found in all_products");
+
+  const priceUsd = fromX18(product.oracle_price_x18);
+  const totalSupply = fromX18(product.state.total_deposits_normalized) * fromX18(product.state.cumulative_deposits_multiplier_x18);
+
+  return { priceUsd, totalSupply, totalValueUsd: totalSupply * priceUsd };
+}
+
+// A subaccount's NLP holding is just its spot balance for the NLP product — same field every
+// other spot balance uses, nothing NLP-specific about reading it.
+export function deriveNlpBalance(info: SubaccountInfoResponse): number {
+  const balance = info.spot_balances.find((b) => b.product_id === NLP_PRODUCT_ID);
+  return balance ? fromX18(balance.balance.amount) : 0;
 }

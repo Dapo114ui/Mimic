@@ -39,3 +39,11 @@ export const KNOWN_PRODUCTS = {
   "BTC-PERP": 2,
   "ETH-PERP": 4,
 } as const;
+
+// NLP (Nado's native liquidity-vault token) isn't in the `symbols` query's ticker list, but is a
+// real spot product with its own live oracle price and lending-market-shaped state. product 11
+// was first identified by cross-checking two independently-computed live figures against each
+// other (a pool's spot balance vs. its own liability figure, computed two different ways —
+// see getNlpStats), then confirmed as an SDK-wide hardcoded constant, not deployment-specific:
+// packages/shared/src/consts/productIds.ts — `export const NLP_PRODUCT_ID = 11`.
+export const NLP_PRODUCT_ID = 11;

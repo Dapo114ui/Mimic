@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { NlpVaultForm } from "@/components/terminal/NlpVaultForm";
+import { NlpVaultStats } from "@/components/vault/NlpVaultStats";
 
 export const metadata: Metadata = {
   title: "NLP Vault — Mimic",
@@ -18,10 +19,10 @@ export default function VaultPage() {
           burn NLP to redeem. This isn&apos;t a Mimic product; it&apos;s Nado&apos;s native
           vault, reached directly through their gateway API.
         </p>
-        <p className="mt-2 text-sm text-mist-dim">
-          There&apos;s no live NLP supply/share-price data wired up here yet — that would need a
-          query type beyond what&apos;s been verified so far. This is the mint/burn action only.
-        </p>
+
+        <div className="mt-8">
+          <NlpVaultStats />
+        </div>
 
         <div className="mt-10">
           <NlpVaultForm />

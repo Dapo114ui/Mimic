@@ -17,7 +17,8 @@ Next.js (App Router) + Tailwind CSS v4 + wagmi/viem for wallet connection and or
   there's no wallet connected, or the connected wallet has no Nado account yet, the page says so
   rather than showing a placeholder account.
 - **`/vault`** — mint/burn Nado's own native liquidity vault (NLP) — not a Mimic product,
-  reached directly through Nado's gateway.
+  reached directly through Nado's gateway. Real NLP price, total supply, TVL, and (once
+  connected) your own NLP balance; mint/burn itself is unconfirmed — see below.
 
 ## Layout
 
@@ -48,12 +49,15 @@ src/
                                   # real archive service (POST — a different wire format from
                                   # client.ts, to a different host)
       account.ts                 # subaccount_info + the position/equity/margin math derived
-                                  # from it, and the symbols query (product_id → ticker)
+                                  # from it, the symbols query (product_id → ticker), and NLP
+                                  # price/supply/balance (NLP is just spot product 11)
       useLiveMarket.ts           # combines gateway + indexer into one hook: price, OI, funding,
                                   # 24h vol/change
       useLiveChart.ts             # candlestick history + recent-trades tape, each its own hook
       usePortfolio.ts             # subaccount_info + trade history + symbols, combined, for the
                                    # connected wallet
+      useNlpVault.ts               # NLP price/supply/TVL (no wallet needed) + your own balance
+                                    # (needs one), for the /vault page
 ```
 
 ## Sample data vs. real integration — two different things here
@@ -131,10 +135,12 @@ with the corrected default and getting a mismatch with the old one. This affecte
 sites sharing `encodeSubaccount`'s default (`OrderForm`, `NlpVaultForm`, and both new portfolio
 queries), now fixed by changing the default to `"default"`. It means the earlier test's rejection
 almost certainly wasn't about deposits at all — it was signed against a subaccount that was never
-going to have any — so order placement is confirmed working mechanically but not yet re-confirmed
-against a real funded account post-fix. `OrderForm` and `NlpVaultForm` both carry a
-`BetaTradingWarning` reflecting exactly this, and mint/burn remains fully unconfirmed on top of
-it — the honesty boundary lives in the UI, not just in this file.
+going to have any. The read side of the fix is confirmed against a real funded account — a real
+user's `/portfolio` page went from showing "no Nado account" to the exact equity figure Nado's own
+site shows for that wallet. The write side (an order or mint/burn actually landing correctly
+post-fix) has not — `OrderForm` and `NlpVaultForm` both carry a `BetaTradingWarning` reflecting
+exactly this, and mint/burn remains fully unconfirmed on top of it — the honesty boundary lives in
+the UI, not just in this file.
 
 `/portfolio` and the homepage's "Your account" card are real for any connected wallet, from the
 gateway's `subaccount_info` query plus the indexer's `matches` query — both confirmed against
@@ -160,6 +166,22 @@ misrepresent a user's actual money, not just show an incomplete market list. One
 `subaccount_info`'s balances appear to be the cross-margin bucket only — isolated positions
 (there's a separate `isolated_positions` query type, not wired up) aren't shown, disclosed
 directly under "Open positions" in the UI rather than silently omitted.
+
+`/vault`'s stats are real too. NLP has no ticker in the `symbols` query, but is a real spot
+product (id 11) with its own live `oracle_price_x18` and lending-market-shaped state — identified
+first by cross-checking two independently-computed live figures against each other (a pool's spot
+balance vs. its own liability, computed two different ways), then confirmed as an SDK-wide
+hardcoded constant (`packages/shared/src/consts/productIds.ts`), not something derived from
+deployment config. Price is that oracle price directly — no NLP-specific price helper exists
+anywhere in the SDK, it's mapped through the exact same generic spot-product path as any other
+product. Total supply is `calcTotalDeposited`'s own formula (`packages/shared/src/utils/
+interest.ts`): normalized deposits × a Compound-style exchange-rate multiplier that starts at 1.0
+and grows as the vault earns fees — the same accounting every other Nado spot-lending-market
+product uses, just reused for NLP issuance. Your own balance is just your spot balance for
+product 11, from the same `subaccount_info` call the portfolio page already makes. One figure is
+deliberately *not* shown: an APR. The SDK's own depositor-APY formula needs a protocol fee-share
+constant that has zero call sites anywhere in the codebase — there's no reliable source for it,
+so it's omitted rather than guessed at for something tied to a real mint/burn decision.
 
 One correction along the way: gateway queries that take parameters (`subaccount_info`) turned out
 to need POST `{type, ...params}` to `/query`, not the GET-with-querystring form `client.ts`
