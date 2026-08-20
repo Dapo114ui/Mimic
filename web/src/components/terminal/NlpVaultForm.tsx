@@ -47,9 +47,7 @@ export function NlpVaultForm() {
           message: { sender, quoteAmount: scaledAmount, nonce },
         });
         await nadoExecute("mint_nlp", {
-          sender,
-          quoteAmount: scaledAmount.toString(),
-          nonce: nonce.toString(),
+          tx: { sender, quoteAmount: scaledAmount.toString(), nonce: nonce.toString() },
           signature,
         });
         setStatus({ type: "success", message: "Mint submitted" });
@@ -61,9 +59,7 @@ export function NlpVaultForm() {
           message: { sender, nlpAmount: scaledAmount, nonce },
         });
         await nadoExecute("burn_nlp", {
-          sender,
-          nlpAmount: scaledAmount.toString(),
-          nonce: nonce.toString(),
+          tx: { sender, nlpAmount: scaledAmount.toString(), nonce: nonce.toString() },
           signature,
         });
         setStatus({ type: "success", message: "Burn submitted" });
@@ -77,7 +73,7 @@ export function NlpVaultForm() {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
       <div className="mt-0">
-        <BetaTradingWarning />
+        <BetaTradingWarning context="vault" />
       </div>
 
       <div className="mt-5 flex gap-2">

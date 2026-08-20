@@ -35,6 +35,7 @@ src/
                                # BetaTradingWarning, SideBadge, SampleDataBanner
     portfolio/                 # PortfolioView (the /portfolio page body), AccountSummaryLink
                                 # (the homepage "Your account" card) — both real, both client
+    vault/                      # NlpVaultStats (price/supply/TVL/your balance) — real, client
     Navbar.tsx, Footer.tsx, ConnectButton.tsx, Providers.tsx
   lib/
     markets.ts                 # sample market list + deterministic candle/fill generation
@@ -183,8 +184,26 @@ deliberately *not* shown: an APR. The SDK's own depositor-APY formula needs a pr
 constant that has zero call sites anywhere in the codebase — there's no reliable source for it,
 so it's omitted rather than guessed at for something tied to a real mint/burn decision.
 
-One correction along the way: gateway queries that take parameters (`subaccount_info`) turned out
-to need POST `{type, ...params}` to `/query`, not the GET-with-querystring form `client.ts`
+Two corrections along the way, both found by an actual real-money mint attempt against a funded
+account. First, `nadoExecute`/`nadoQuery` called `res.json()` unconditionally — but not every
+gateway error is the `{status:"failure",...}` JSON envelope; a malformed payload gets a plain-text
+4xx body instead (e.g. "Failed to deserialize..."), and `res.json()` on that throws an opaque
+"Unexpected token" `SyntaxError` that hides the real message. Fixed to read the body as text first
+and only parse it as JSON if it looks like JSON. Second — the actual real bug that error handling
+had been hiding: `mint_nlp`/`burn_nlp`'s execute payload needs `{tx: {sender, quoteAmount, nonce},
+signature}`, a nested `tx` object, not the flat `{sender, quoteAmount, nonce, signature}` the code
+was sending — discovered the same empirical way as everything else in this file (probe with a
+deliberately incomplete body, follow the "missing field" errors one at a time), then confirmed
+against the live gateway by sending a full payload with a dummy signature and getting all the way
+to a real, well-formed `"malformed signature"` rejection instead of a deserialize error. This is
+the reason a real test mint got the opaque JSON-parse error above, not a real gateway response —
+`place_order`'s shape was already correct (it round-tripped successfully earlier), so this is a
+`mint_nlp`/`burn_nlp`-specific fix, and `BetaTradingWarning` now says explicitly, in the vault
+context, that mint/burn hasn't completed a real round trip yet at all, not even against the wrong
+subaccount the way orders had.
+
+One correction from before that: gateway queries that take parameters (`subaccount_info`) turned
+out to need POST `{type, ...params}` to `/query`, not the GET-with-querystring form `client.ts`
 previously used for the zero-param `all_products` case — GET happened to also work live, but POST
 is what Nado's own SDK actually sends, so `nadoQuery` now does that uniformly for every query.
 
