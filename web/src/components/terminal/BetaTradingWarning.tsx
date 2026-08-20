@@ -4,11 +4,11 @@ export function BetaTradingWarning() {
       <p className="font-medium text-rose-300">Mainnet · Beta — real funds</p>
       <p className="mt-1 text-rose-200/70">
         This signs and submits real transactions to Nado&apos;s Ink mainnet gateway with your
-        connected wallet. The signing scheme (EIP-712 domains, order/appendix encoding,
-        subaccount format) is grounded in Nado&apos;s own SDK source and documentation, but no
-        signed transaction from this integration has actually been round-tripped end to end —
-        there&apos;s no funded wallet in the environment that built it to test with. Start with a
-        small size until you&apos;ve confirmed an order behaves as expected.
+        connected wallet. Signing and submission are confirmed working — a real signed order has
+        round-tripped to the gateway and gotten back a real response. That earlier test hit a
+        subaccount-encoding bug (since fixed) that targeted the wrong, unfunded subaccount rather
+        than your real one, so it&apos;s not yet re-confirmed against an actually funded account.
+        Start with a small size and double-check what you&apos;re signing before confirming.
       </p>
     </div>
   );

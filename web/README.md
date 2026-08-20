@@ -112,17 +112,29 @@ service through this environment's outbound proxy — confirmed again here, now 
 POST — so this was validated by replicating the browser-side logic in Node against live captured
 JSON rather than an actual rendered screenshot; `npm run build`/`eslint` are clean.)
 
-The order `appendix` bitfield and default subaccount encoding — the two riskiest unknowns when
-this only targeted testnet — are backed by Nado/Vertex-family documentation: `appendix = 0`
+The order `appendix` bitfield is backed by Nado/Vertex-family documentation: `appendix = 0`
 decodes to version 0, not isolated, order type 0 (DEFAULT/standard limit), not reduce-only, no
-trigger, i.e. exactly the plain limit order `OrderForm` places; an empty subaccount name is
-explicitly documented as "the default subaccount identifier." A real order has since been signed
-and submitted through `OrderForm` from a real browser and got back a real gateway response (an
-insufficient-collateral rejection, since that wallet had never deposited) — confirming the
-sign → submit → real-API-response path genuinely works end to end, not just in theory.
-`OrderForm` and `NlpVaultForm` both carry a `BetaTradingWarning` making clear that mint/burn in
-particular has not been round-tripped the same way, and suggesting a small size to start — the
-honesty boundary lives in the UI, not just in this file.
+trigger, i.e. exactly the plain limit order `OrderForm` places. A real order has since been signed
+and submitted through `OrderForm` from a real browser and got back a real gateway response —
+confirming the sign → submit → real-API-response path genuinely works end to end, not just in
+theory.
+
+That test's rejection was originally attributed to "the wallet had never deposited" — that
+explanation turned out to be unverified and probably wrong. `encodeSubaccount`'s default name was
+`""` (empty string), sourced from a documentation read claiming an all-zero name is "the default
+subaccount identifier." Building the portfolio page surfaced a real, funded account showing as
+`exists: false`, which led to decoding real `sender` hexes from live order/match data all session:
+every one has its trailing 12 bytes as ASCII `"default"` + zero padding, never all zeros. An
+empty name is a *different, real-but-uninvolved* subaccount — not a fallback or an error, just
+the wrong address entirely, confirmed by reconstructing a known real subaccount hash byte-for-byte
+with the corrected default and getting a mismatch with the old one. This affected all four call
+sites sharing `encodeSubaccount`'s default (`OrderForm`, `NlpVaultForm`, and both new portfolio
+queries), now fixed by changing the default to `"default"`. It means the earlier test's rejection
+almost certainly wasn't about deposits at all — it was signed against a subaccount that was never
+going to have any — so order placement is confirmed working mechanically but not yet re-confirmed
+against a real funded account post-fix. `OrderForm` and `NlpVaultForm` both carry a
+`BetaTradingWarning` reflecting exactly this, and mint/burn remains fully unconfirmed on top of
+it — the honesty boundary lives in the UI, not just in this file.
 
 `/portfolio` and the homepage's "Your account" card are real for any connected wallet, from the
 gateway's `subaccount_info` query plus the indexer's `matches` query — both confirmed against

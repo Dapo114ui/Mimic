@@ -30,10 +30,16 @@ export function getEndpointDomain() {
   } as const;
 }
 
-// bytes32 = 20-byte owner address ++ 12-byte subaccount name (UTF-8, right-padded with
-// zeros). Confirmed against Nado/Vertex-family documentation: an empty name (all-zero bytes,
-// which is what this produces by default) is explicitly "the default subaccount identifier."
-export function encodeSubaccount(owner: Address, name: string = ""): Hex {
+// bytes32 = 20-byte owner address ++ 12-byte subaccount name (UTF-8, right-padded with zeros).
+// The default subaccount's name is the literal string "default", not an empty string — an
+// earlier version of this comment claimed otherwise, from Nado/Vertex-family docs read as
+// saying an all-zero name was "the default subaccount identifier". That was wrong: every real
+// `sender`/subaccount hex observed live this session (across many different accounts, in order
+// and match data) decodes its trailing 12 bytes to ASCII "default" + zero padding, never all
+// zeros. An all-zero name is a different, non-existent subaccount — which is exactly what made
+// a real funded wallet look account-less on the portfolio page (`subaccount_info` correctly
+// reported `exists: false` for the wrong, empty-named subaccount this function used to build).
+export function encodeSubaccount(owner: Address, name: string = "default"): Hex {
   const nameBytes = new TextEncoder().encode(name).slice(0, 12);
   const nameHex = pad(toHex(nameBytes), { size: 12, dir: "right" });
   return concat([owner, nameHex]);
