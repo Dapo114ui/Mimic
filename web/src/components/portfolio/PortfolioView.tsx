@@ -4,6 +4,7 @@ import { useAccount } from "wagmi";
 import { usePortfolio } from "@/lib/nado/usePortfolio";
 import { ConnectButton } from "@/components/ConnectButton";
 import { SideBadge } from "@/components/terminal/SideBadge";
+import { OpenOrdersTable } from "@/components/portfolio/OpenOrdersTable";
 import { formatDateTime, formatSignedPct, formatUsd } from "@/lib/format";
 
 export function PortfolioView() {
@@ -104,6 +105,17 @@ export function PortfolioView() {
             </table>
           </div>
         )}
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-lg font-medium text-foreground">Open orders</h2>
+        <p className="mt-1 text-xs text-mist-dim">
+          BTC-PERP and ETH-PERP only — the only markets you can place orders in here. Cancel
+          signs and submits a real cancellation using the same signing path as order placement,
+          but hasn&apos;t been round-tripped against a real order yet — check the result before
+          assuming it went through.
+        </p>
+        <OpenOrdersTable />
       </section>
 
       <section className="mt-10">

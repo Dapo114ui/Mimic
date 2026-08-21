@@ -195,3 +195,52 @@ export async function getNlpLockStatus(owner: Address): Promise<NlpLockStatus> {
     })),
   };
 }
+
+type SubaccountOrderRow = {
+  price_x18: string;
+  amount: string;
+  unfilled_amount: string;
+  order_type: string;
+  expiration: string;
+  placed_at: number;
+  digest: string;
+};
+
+type SubaccountOrdersResponse = { orders: SubaccountOrderRow[] };
+
+export type OpenOrder = {
+  productId: number;
+  market: string;
+  side: "Long" | "Short";
+  price: number;
+  size: number;
+  orderType: string;
+  placedAt: string;
+  expiresAt: string;
+  digest: string;
+};
+
+// `subaccount_orders` is per-product (confirmed: omitting `product_id` errors with "missing
+// field product_id" separately from `sender`), unlike `subaccount_info` which returns every
+// product's balances in one call — so this has to be queried once per market. `unfilled_amount`
+// (not `amount`) is the actual remaining size, since a resting order can be partially filled
+// without leaving the book. `order_type` comes back as a decoded string ("post_only", etc.)
+// rather than the raw `appendix` bitfield — no client-side decoding needed.
+export async function getSubaccountOrders(owner: Address, productId: number, market: string): Promise<OpenOrder[]> {
+  const sender = encodeSubaccount(owner);
+  const { orders } = await nadoQuery<SubaccountOrdersResponse>("subaccount_orders", { sender, product_id: productId });
+  return orders.map((o) => {
+    const amount = fromX18(o.amount);
+    return {
+      productId,
+      market,
+      side: amount >= 0 ? "Long" : "Short",
+      price: fromX18(o.price_x18),
+      size: Math.abs(fromX18(o.unfilled_amount)),
+      orderType: o.order_type,
+      placedAt: new Date(o.placed_at * 1000).toISOString(),
+      expiresAt: new Date(Number(o.expiration) * 1000).toISOString(),
+      digest: o.digest,
+    };
+  });
+}

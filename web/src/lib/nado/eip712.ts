@@ -72,6 +72,18 @@ export const BURN_NLP_TYPES = {
   ],
 } as const;
 
+// Confirmed against packages/shared/src/eip712/getNadoEIP712Types.ts in the SDK — the primary
+// type name is "Cancellation", not the more obvious-looking "CancelOrders" guess. `productIds`
+// is uint32[] specifically (not uint256[]), matching the SDK's own struct exactly.
+export const CANCEL_ORDERS_TYPES = {
+  Cancellation: [
+    { name: "sender", type: "bytes32" },
+    { name: "productIds", type: "uint32[]" },
+    { name: "digests", type: "bytes32[]" },
+    { name: "nonce", type: "uint64" },
+  ],
+} as const;
+
 // For ORDER nonces only — confirmed (via the gateway's `nonces` query, which returns two
 // independent counters per owner address) that `order_nonce` really is a large, timestamp-shaped
 // value, so "any value greater than last used" generation like this works. `tx_nonce` — used by

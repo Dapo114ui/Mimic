@@ -10,6 +10,7 @@ import { LiveTradesTable } from "@/components/terminal/LiveTradesTable";
 import { SampleDataBanner } from "@/components/terminal/SampleDataBanner";
 import { LiveMarketHeader, LiveMarketStats } from "@/components/terminal/LiveMarketPanel";
 import { OrderForm } from "@/components/terminal/OrderForm";
+import { OrderBook } from "@/components/terminal/OrderBook";
 
 export function generateStaticParams() {
   return getAllMarkets().map((market) => ({ symbol: market.symbol }));
@@ -79,8 +80,9 @@ export default async function MarketDetailPage({ params }: PageProps<"/markets/[
         </div>
 
         {productId !== undefined ? (
-          <div className="mt-10">
+          <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
             <OrderForm productId={productId} />
+            <OrderBook productId={productId} />
           </div>
         ) : (
           <p className="mt-10 rounded-2xl border border-white/10 bg-white/[0.02] p-4 text-sm text-mist-dim">
