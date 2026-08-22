@@ -227,12 +227,26 @@ Third — with the payload shape fixed, a real mint attempt against a funded acc
 signature validation and reached a real on-chain rejection: `"Invalid nonce: expected: 0"`. The
 gateway's `nonces` query (param `address` — the plain 20-byte owner address, not an encoded
 subaccount, unlike every other account query here) returns *two* independent counters per owner:
-`order_nonce`, a large timestamp-shaped value where "anything greater than last used" is valid
-(what `generateNonce()`/`place_order` already correctly does), and `tx_nonce`, a small strictly-
-sequential counter (0, 1, 2, ...) required by every execute that wraps its payload in a `tx`
-object. `NlpVaultForm` was generating a timestamp-shaped nonce for a field that needed to equal
-the account's current `tx_nonce` exactly — fixed by fetching it fresh from `nonces`
+`order_nonce`, a large timestamp-shaped value used by `place_order`, and `tx_nonce`, a small
+strictly-sequential counter (0, 1, 2, ...) required by every execute that wraps its payload in a
+`tx` object. `NlpVaultForm` was generating a timestamp-shaped nonce for a field that needed to
+equal the account's current `tx_nonce` exactly — fixed by fetching it fresh from `nonces`
 (`account.ts`'s `getTxNonce`) immediately before signing, rather than generating one.
+
+The order nonce turned out to have real internal structure too, which this file previously got
+wrong (it claimed any value "greater than last used" works — it doesn't). Its top 44 bits are a
+millisecond `recv_time` timestamp and its low 20 bits are random: decoded straight out of real
+order nonces in live gateway/indexer data, every one of which shifts down (`>> 20`) to exactly
+the wall-clock moment that order was placed. The old `Date.now() * 1000 + jitter` produced the
+right *magnitude* but the wrong *shape* — it decoded to a 1970 timestamp, so a real order got
+`"Request received after 'recv_time'"`. `recv_time` is a deadline with a window on both sides,
+mapped by probing the boundary live: the request is rejected if it arrives after it, and also if
+it arrives more than 100 seconds before it. Since the nonce is signed *before* the wallet prompt
+appears, that window is effectively the user's time to review and confirm — `generateNonce` uses
+90s, taking nearly all of the 100s allowance in both directions (confirm instantly and it still
+lands ~90s early, inside the cap; take up to ~90s and it still beats the deadline). An order left
+sitting unconfirmed past that will fail and need re-signing, which `OrderForm` says up front
+rather than letting it surface as a confusing gateway error.
 
 With both fixes live, a real mint against a real funded account went through — the gateway
 accepted it, no error, `nadoExecute` resolved successfully. Mint is confirmed working end to end,

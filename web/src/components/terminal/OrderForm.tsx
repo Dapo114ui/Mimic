@@ -137,15 +137,23 @@ export function OrderForm({ productId }: { productId: number }) {
             Connect a wallet to place an order
           </p>
         ) : (
-          <button
-            type="submit"
-            disabled={status.type === "pending"}
-            className={`w-full rounded-full px-6 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-              side === "buy" ? "bg-emerald-400 text-ink-950 hover:bg-emerald-300" : "bg-rose-400 text-ink-950 hover:bg-rose-300"
-            }`}
-          >
-            {status.type === "pending" ? "Signing…" : side === "buy" ? "Buy" : "Sell"}
-          </button>
+          <>
+            <button
+              type="submit"
+              disabled={status.type === "pending"}
+              className={`w-full rounded-full px-6 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                side === "buy" ? "bg-emerald-400 text-ink-950 hover:bg-emerald-300" : "bg-rose-400 text-ink-950 hover:bg-rose-300"
+              }`}
+            >
+              {status.type === "pending" ? "Signing…" : side === "buy" ? "Buy" : "Sell"}
+            </button>
+            {status.type === "pending" && (
+              <p className="text-center text-xs text-mist-dim">
+                Confirm in your wallet within ~90s — a signed order carries a deadline, and Nado
+                rejects it after that. If it expires, just place the order again.
+              </p>
+            )}
+          </>
         )}
 
         {status.type === "success" && (

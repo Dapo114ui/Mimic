@@ -84,13 +84,27 @@ export const CANCEL_ORDERS_TYPES = {
   ],
 } as const;
 
-// For ORDER nonces only — confirmed (via the gateway's `nonces` query, which returns two
-// independent counters per owner address) that `order_nonce` really is a large, timestamp-shaped
-// value, so "any value greater than last used" generation like this works. `tx_nonce` — used by
-// mint_nlp/burn_nlp and anything else that wraps its payload in a `tx` object — is a small,
-// strictly-sequential counter instead and must be read fresh from that query
-// (`account.ts`'s `getTxNonce`), not generated; using this function for that class of execute is
-// exactly the bug a real mint_nlp attempt hit ("Invalid nonce: expected: 0").
+// How long a signed order stays submittable. The nonce's recv_time is a deadline: the gateway
+// rejects a request that arrives after it, AND one that arrives more than 100s before it (both
+// limits confirmed live by probing the boundary). Since the nonce is baked into the signed
+// payload, this window has to be picked *before* the user sees their wallet prompt — so it's
+// really "how long the user gets to review and confirm". 90s takes almost all of the 100s
+// allowance: confirm instantly and the request still lands ~90s early (inside the cap); take up
+// to ~90s to confirm and it still lands before the deadline.
+const ORDER_RECV_WINDOW_MS = 90_000;
+
+// For ORDER nonces only. Not an arbitrary increasing number: the top 44 bits are a millisecond
+// `recv_time` timestamp and the low 20 bits are random — decoded straight out of real order
+// nonces seen in live gateway/indexer data, every one of which shifts down (>> 20) to exactly
+// the wall-clock time that order was placed. The previous implementation here (`Date.now() *
+// 1000 + jitter`) produced a number of roughly the right magnitude but the wrong *shape*: it
+// decoded to a 1970 timestamp, so every order was rejected with "Request received after
+// 'recv_time'" — the error a real order surfaced. `tx_nonce` — used by mint_nlp/burn_nlp and
+// anything else wrapping its payload in a `tx` object — is a different thing again: a small,
+// strictly-sequential counter that must be read fresh from the gateway's `nonces` query
+// (`account.ts`'s `getTxNonce`), never generated.
 export function generateNonce(): bigint {
-  return BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000));
+  const recvTimeMs = BigInt(Date.now() + ORDER_RECV_WINDOW_MS);
+  const random = BigInt(Math.floor(Math.random() * 2 ** 20));
+  return (recvTimeMs << 20n) | random;
 }
