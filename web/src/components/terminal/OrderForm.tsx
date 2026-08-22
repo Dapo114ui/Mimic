@@ -40,11 +40,14 @@ export function OrderForm({ productId }: { productId: number }) {
       const priceX18 = BigInt(Math.round(priceNum * 1e18));
       const nonce = generateNonce();
       const expiration = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
-      // 0 packs to: version 0, not isolated, order type 0 (DEFAULT/standard limit order),
+      // version 1 (lowest 8 bits), not isolated, order type 0 (DEFAULT/standard limit order),
       // not reduce-only, no trigger — i.e. exactly the plain limit order this form places.
-      // Confirmed against the documented 128-bit appendix layout (version:8, isolated:1,
-      // orderType:2, reduceOnly:1, trigger:2, reserved:50, value:64).
-      const appendix = 0n;
+      // A real submitted order came back "Invalid Order Version: the order version in the
+      // appendix, 0, does not match the expected version: 1" — Nado bumped the required
+      // version since this was first verified against documentation (which said 0). Confirmed
+      // the fix (not just the error) live: appendix=0 reproduces that exact rejection,
+      // appendix=1 clears it and reaches an unrelated later validation stage instead.
+      const appendix = 1n;
 
       const signature = await signTypedDataAsync({
         domain: getOrderDomain(productId),

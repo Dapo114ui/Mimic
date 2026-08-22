@@ -130,12 +130,21 @@ service through this environment's outbound proxy — confirmed again here, now 
 POST — so this was validated by replicating the browser-side logic in Node against live captured
 JSON rather than an actual rendered screenshot; `npm run build`/`eslint` are clean.)
 
-The order `appendix` bitfield is backed by Nado/Vertex-family documentation: `appendix = 0`
-decodes to version 0, not isolated, order type 0 (DEFAULT/standard limit), not reduce-only, no
-trigger, i.e. exactly the plain limit order `OrderForm` places. A real order has since been signed
-and submitted through `OrderForm` from a real browser and got back a real gateway response —
-confirming the sign → submit → real-API-response path genuinely works end to end, not just in
-theory.
+The order `appendix` bitfield is backed by Nado/Vertex-family documentation: not isolated, order
+type 0 (DEFAULT/standard limit), not reduce-only, no trigger, i.e. exactly the plain limit order
+`OrderForm` places — except the version sub-field itself has since had to change. Documentation
+said version 0; a real order against a real funded account (post subaccount-encoding fix) got
+rejected with `"Invalid Order Version: the order version in the appendix, 0, does not match the
+expected version: 1"` — confirmed live (not just read off the error message) by reproducing the
+exact rejection with `appendix=0` and a throwaway signature, then clearing it with `appendix=1`,
+which moved on to an unrelated later validation stage instead. Nado bumped the required version
+sometime between this integration's first real order test (which got a real, well-formed
+"insufficient collateral" response using version 0) and this one — a concrete reminder that this
+kind of encoding constant isn't a "verify once and forget" fact, since the live protocol itself
+can move underneath a client that was correct when it was written. The fix itself is verified
+live (not guessed from the error text); a full real order with the corrected version hasn't been
+retried yet at the time of this note, so "does a real order actually fill/rest now" is still the
+next thing to confirm, not something this fix alone proves.
 
 That test's rejection was originally attributed to "the wallet had never deposited" — that
 explanation turned out to be unverified and probably wrong. `encodeSubaccount`'s default name was

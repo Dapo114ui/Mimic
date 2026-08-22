@@ -7,10 +7,12 @@ export function BetaTradingWarning({ context = "order" }: { context?: "order" | 
         connected wallet.{" "}
         {context === "order" ? (
           <>
-            Signing and submission are confirmed working — a real signed order has round-tripped
-            to the gateway and gotten back a real response. That earlier test hit a subaccount-
-            encoding bug (since fixed) that targeted the wrong, unfunded subaccount rather than
-            your real one, so it&apos;s not yet re-confirmed against an actually funded account.
+            Signing and submission are confirmed working — a real signed order against a real
+            funded account has round-tripped to the gateway. A live protocol change surfaced
+            along the way (Nado bumped its required order-version field; a real order was
+            rejected with the exact mismatch, since fixed) — worth knowing this integration
+            depends on values that can drift as Nado itself evolves, not just on Mimic&apos;s own
+            code being correct once.
           </>
         ) : (
           <>
