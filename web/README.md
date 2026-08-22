@@ -1,5 +1,7 @@
 # Mimic — web
 
+**Live:** [nadoxx.vercel.app](https://nadoxx.vercel.app)
+
 A market data, order-placement, and portfolio dashboard for [Nado](https://www.nado.xyz/).
 Next.js (App Router) + Tailwind CSS v4 + wagmi/viem for wallet connection and order signing,
 [lightweight-charts](https://github.com/tradingview/lightweight-charts) for the candlestick chart.
