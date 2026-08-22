@@ -1,6 +1,6 @@
 # Mimic — web
 
-**Live:** [nadoxx.vercel.app](https://nadoxx.vercel.app)
+**Live:** [surgeterminal.vercel.app](https://surgeterminal.vercel.app)
 
 A market data, order-placement, and portfolio dashboard for [Nado](https://www.nado.xyz/).
 Next.js (App Router) + Tailwind CSS v4 + wagmi/viem for wallet connection and order signing,
