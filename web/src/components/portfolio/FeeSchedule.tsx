@@ -2,8 +2,9 @@
 
 import { useAccount } from "wagmi";
 import { useFeeRates } from "@/lib/nado/useFeeRates";
+import { useLiveMarkets } from "@/lib/nado/useLiveMarkets";
 import { MEASURED_BURN_FEE_USD, MEASURED_MINT_FEE_USD } from "@/lib/nado/fees";
-import { KNOWN_PRODUCTS, NADO_QUOTE_TOKEN } from "@/lib/nado/config";
+import { NADO_QUOTE_TOKEN } from "@/lib/nado/config";
 import { formatUsd } from "@/lib/format";
 
 function Row({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -21,6 +22,7 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
 export function FeeSchedule() {
   const { address, isConnected } = useAccount();
   const { data: fees, isLoading, isError } = useFeeRates(address);
+  const { data: markets } = useLiveMarkets();
 
   if (!isConnected) {
     return (
@@ -49,6 +51,20 @@ export function FeeSchedule() {
   const pct = (v: number) => `${(v * 100).toFixed(3)}%`;
   const quoteWithdrawFee = fees.withdrawFeeFor(0);
 
+  // Rates are per-product but nearly all markets share one pair, so listing ~75 near-identical
+  // rows would be noise. Group by rate instead and show how many markets fall in each band.
+  const rateGroups = new Map<string, { maker: number; taker: number; markets: string[] }>();
+  for (const m of markets ?? []) {
+    const maker = fees.makerRateFor(m.productId);
+    const taker = fees.takerRateFor(m.productId);
+    const key = `${maker}|${taker}`;
+    const existing = rateGroups.get(key);
+    if (existing) existing.markets.push(m.symbol);
+    else rateGroups.set(key, { maker, taker, markets: [m.symbol] });
+  }
+  const groups = [...rateGroups.values()].sort((a, b) => b.markets.length - a.markets.length);
+  const commonTaker = groups[0]?.taker ?? 0;
+
   return (
     <div className="mt-3 space-y-6">
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
@@ -56,18 +72,31 @@ export function FeeSchedule() {
           Trading · your rates, fee tier {fees.feeTier}
         </p>
         <div className="mt-2">
-          {Object.entries(KNOWN_PRODUCTS).map(([market, productId]) => (
-            <Row
-              key={market}
-              label={market}
-              hint="maker = your order rests on the book · taker = it fills immediately"
-              value={`${pct(fees.makerRateFor(productId))} / ${pct(fees.takerRateFor(productId))}`}
-            />
-          ))}
+          {groups.length === 0 ? (
+            <p className="py-2 text-sm text-mist-dim">Loading markets…</p>
+          ) : (
+            groups.map((g) => (
+              <Row
+                key={`${g.maker}|${g.taker}`}
+                label={
+                  g.markets.length === 1
+                    ? g.markets[0]
+                    : `${g.markets.length} markets`
+                }
+                hint={
+                  g.markets.length === 1
+                    ? "maker / taker"
+                    : `maker / taker — incl. ${g.markets.slice(0, 3).join(", ")}${g.markets.length > 3 ? "…" : ""}`
+                }
+                value={`${pct(g.maker)} / ${pct(g.taker)}`}
+              />
+            ))
+          )}
         </div>
         <p className="mt-2 text-xs text-mist-dim">
-          Proportional to order value, so a $1,000 order at the taker rate costs{" "}
-          {formatUsd(1000 * fees.takerRateFor(KNOWN_PRODUCTS["BTC-PERP"]))}.
+          Maker = your order rests on the book; taker = it fills immediately. Proportional to
+          order value, so a $1,000 order at {pct(commonTaker)} costs{" "}
+          {formatUsd(1000 * commonTaker)}.
         </p>
       </div>
 

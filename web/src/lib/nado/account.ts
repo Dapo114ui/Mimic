@@ -206,7 +206,9 @@ type SubaccountOrderRow = {
   digest: string;
 };
 
-type SubaccountOrdersResponse = { orders: SubaccountOrderRow[] };
+type BulkOrdersResponse = {
+  product_orders: { product_id: number; orders: SubaccountOrderRow[] }[];
+};
 
 export type OpenOrder = {
   productId: number;
@@ -220,27 +222,46 @@ export type OpenOrder = {
   digest: string;
 };
 
-// `subaccount_orders` is per-product (confirmed: omitting `product_id` errors with "missing
-// field product_id" separately from `sender`), unlike `subaccount_info` which returns every
-// product's balances in one call — so this has to be queried once per market. `unfilled_amount`
-// (not `amount`) is the actual remaining size, since a resting order can be partially filled
-// without leaving the book. `order_type` comes back as a decoded string ("post_only", etc.)
-// rather than the raw `appendix` bitfield — no client-side decoding needed.
-export async function getSubaccountOrders(owner: Address, productId: number, market: string): Promise<OpenOrder[]> {
+// Resting orders across every market in one call. The singular `subaccount_orders` query takes
+// one `product_id`, which would mean ~75 requests now that all of Nado's markets are listed; the
+// plural `orders` query takes `product_ids[]` and returns a `product_orders` array instead.
+//
+// The indexer has an `orders` query too, but it is NOT a substitute: it returns order *history*
+// (every row carries fills, realized_pnl, closed_amount) and omits never-filled orders entirely —
+// checked against an account where the gateway reported 2 resting orders on one product while
+// the indexer returned 100 rows, none of them unfilled. Only the gateway sees the live book.
+//
+// `unfilled_amount` (not `amount`) is the real remaining size, since a resting order can be
+// partially filled without leaving the book. `order_type` arrives already decoded ("post_only",
+// "default", …) rather than as the raw `appendix` bitfield.
+export async function getAllOpenOrders(
+  owner: Address,
+  productIds: number[],
+  symbolMap: Map<number, string>
+): Promise<OpenOrder[]> {
+  if (productIds.length === 0) return [];
   const sender = encodeSubaccount(owner);
-  const { orders } = await nadoQuery<SubaccountOrdersResponse>("subaccount_orders", { sender, product_id: productId });
-  return orders.map((o) => {
-    const amount = fromX18(o.amount);
-    return {
-      productId,
-      market,
-      side: amount >= 0 ? "Long" : "Short",
-      price: fromX18(o.price_x18),
-      size: Math.abs(fromX18(o.unfilled_amount)),
-      orderType: o.order_type,
-      placedAt: new Date(o.placed_at * 1000).toISOString(),
-      expiresAt: new Date(Number(o.expiration) * 1000).toISOString(),
-      digest: o.digest,
-    };
+  const { product_orders } = await nadoQuery<BulkOrdersResponse>("orders", {
+    sender,
+    product_ids: productIds,
   });
+
+  return product_orders
+    .flatMap(({ product_id, orders }) =>
+      orders.map((o) => {
+        const amount = fromX18(o.amount);
+        return {
+          productId: product_id,
+          market: symbolMap.get(product_id) ?? `Product #${product_id}`,
+          side: amount >= 0 ? ("Long" as const) : ("Short" as const),
+          price: fromX18(o.price_x18),
+          size: Math.abs(fromX18(o.unfilled_amount)),
+          orderType: o.order_type,
+          placedAt: new Date(o.placed_at * 1000).toISOString(),
+          expiresAt: new Date(Number(o.expiration) * 1000).toISOString(),
+          digest: o.digest,
+        };
+      })
+    )
+    .sort((a, b) => (a.placedAt < b.placedAt ? 1 : -1));
 }

@@ -2,30 +2,33 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Address } from "viem";
-import { getSubaccountOrders } from "./account";
-import { KNOWN_PRODUCTS } from "./config";
+import { getAllOpenOrders } from "./account";
+import { useLiveMarkets } from "./useLiveMarkets";
 
-// subaccount_orders is per-product, and order placement here only supports the known products
-// (BTC-PERP/ETH-PERP) — so "your open orders" is scoped to exactly what this app can place
-// orders in, the same boundary OrderForm already draws, queried in parallel and merged.
+// Open orders across every Nado market, not just the two that used to be hardcoded — one
+// gateway call covering all product ids, keyed off the live market list so a market Nado adds
+// later is included without a code change.
 export function useOpenOrders(address: Address | undefined) {
   const queryClient = useQueryClient();
-  const entries = Object.entries(KNOWN_PRODUCTS);
+  const { data: markets } = useLiveMarkets();
+
+  const productIds = markets?.map((m) => m.productId) ?? [];
+  const symbolMap = new Map((markets ?? []).map((m) => [m.productId, m.symbol]));
 
   const query = useQuery({
-    queryKey: ["nado-open-orders", address],
-    queryFn: async () => {
-      const perMarket = await Promise.all(
-        entries.map(([market, productId]) => getSubaccountOrders(address!, productId, market))
-      );
-      return perMarket.flat().sort((a, b) => (a.placedAt < b.placedAt ? 1 : -1));
-    },
-    enabled: !!address,
+    queryKey: ["nado-open-orders", address, productIds.length],
+    queryFn: () => getAllOpenOrders(address!, productIds, symbolMap),
+    enabled: !!address && productIds.length > 0,
     staleTime: 5_000,
     refetchInterval: 10_000,
   });
 
   const refetch = () => queryClient.invalidateQueries({ queryKey: ["nado-open-orders", address] });
 
-  return { orders: query.data ?? [], isLoading: query.isLoading, isError: query.isError, refetch };
+  return {
+    orders: query.data ?? [],
+    isLoading: query.isLoading || !markets,
+    isError: query.isError,
+    refetch,
+  };
 }

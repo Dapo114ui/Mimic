@@ -8,20 +8,21 @@ Next.js (App Router) + Tailwind CSS v4 + wagmi/viem for wallet connection and or
 
 ## Pages
 
-- **`/`** — market watchlist: price, 24h change, volume, funding rate, open interest across
-  Nado's perp markets, sortable. Links into `/portfolio`.
-- **`/markets/[symbol]`** — one market: candlestick chart and a recent-trades tape, and for
-  BTC-PERP/ETH-PERP specifically: a real order-entry form, a real live order book, a fully live
-  header and stats row (price, 24h change, 24h volume, open interest, funding rate), a live
-  candlestick chart with a real 1m–1W timeframe selector, and a live recent-trades tape. Other
-  markets fall back to sample chart/stats/trades and have no order form or order book.
+- **`/`** — live watchlist of **every** perp market on Nado (~75): price, 24h change, volume,
+  funding, open interest, searchable and sortable. All real, no sample rows.
+- **`/markets/[symbol]`** — one market: live header and stats (price, 24h change, volume, open
+  interest, funding, maker/taker fees), candlestick chart with a real 1m–1W timeframe selector,
+  live order book, order entry, and a live recent-trades tape. Works for any market Nado lists —
+  the product id is resolved from Nado's own `symbols` query at runtime, so a market added later
+  needs no code change.
 - **`/portfolio`** — the connected wallet's real Nado account: equity, available margin, margin
   ratio, unrealized PnL, open positions, open orders (with cancel), and fill history. Nothing
   here is sample data — if there's no wallet connected, or the connected wallet has no Nado
   account yet, the page says so rather than showing a placeholder account.
 - **`/vault`** — mint/burn Nado's own native liquidity vault (NLP) — not a Mimic product,
   reached directly through Nado's gateway. Real NLP price, total supply, TVL, and (once
-  connected) your own NLP balance; mint/burn itself is unconfirmed — see below.
+  connected) your own NLP balance, lock status, and measured mint/burn fees. Mint and burn are
+  both confirmed working end to end.
 
 ## Layout
 
@@ -35,13 +36,14 @@ src/
   components/
     terminal/                 # MarketsTable, CandlestickChart, LiveCandlestickChart, TradesTable,
                                # LiveTradesTable, OrderForm, OrderBook, NlpVaultForm,
-                               # LiveMarketPanel, BetaTradingWarning, SideBadge, SampleDataBanner
+                               # LiveMarketPanel, MarketDetail, LiveMarketsTable,
+                               # BetaTradingWarning, SideBadge
     portfolio/                 # PortfolioView (the /portfolio page body), OpenOrdersTable,
                                 # AccountSummaryLink (the homepage "Your account" card) — real, client
     vault/                      # NlpVaultStats (price/supply/TVL/your balance) — real, client
     Navbar.tsx, Footer.tsx, ConnectButton.tsx, Providers.tsx
   lib/
-    markets.ts                 # sample market list + deterministic candle/fill generation
+    types.ts                    # shared Candle / Fill shapes
     format.ts                   # shared formatters (USD, price, pct, date/time)
     wagmi.ts                    # wagmi config — Ink mainnet (chain 57073), injected connector
     nado/
@@ -56,7 +58,7 @@ src/
       account.ts                 # subaccount_info + the position/equity/margin math derived
                                   # from it, the symbols query (product_id → ticker), NLP
                                   # price/supply/balance (NLP is just spot product 11), tx_nonce,
-                                  # and per-product open orders (subaccount_orders)
+                                  # and open orders across all markets (bulk `orders` query)
       orderbook.ts                # market_liquidity → real bid/ask depth
       useLiveMarket.ts           # combines gateway + indexer into one hook: price, OI, funding,
                                   # 24h vol/change
@@ -65,31 +67,45 @@ src/
       useOrderBook.ts              # real order book, one hook, 3s refetch
       usePortfolio.ts             # subaccount_info + trade history + symbols, combined, for the
                                    # connected wallet
-      useOpenOrders.ts              # subaccount_orders across BTC-PERP/ETH-PERP, merged
+      markets.ts                   # every Nado perp market, assembled from 4 bulk calls
+      useLiveMarkets.ts             # the market list, for the home page and symbol resolution
+      fees.ts / useFeeRates.ts       # real per-account trading + flat fee schedule
+      useOpenOrders.ts              # resting orders across every market, one call
       useCancelOrder.ts              # signs + submits a real cancel_orders — confirmed working
       useNlpVault.ts               # NLP price/supply/TVL (no wallet needed) + your own balance
                                     # and locked/unlocked breakdown (needs one), for /vault
 ```
 
-## Sample data vs. real integration — two different things here
+## Everything here is real data
 
-`lib/markets.ts` is still sample data for markets other than BTC-PERP/ETH-PERP (no historical/
-24h/volume feed was verified for them — see below), clearly labeled as such (`SampleDataBanner`)
-on every page that uses it. The account/portfolio data (`lib/nado/account.ts`, `usePortfolio.ts`)
-is real for any connected wallet, in any market — see its own section below.
+There is no sample data left. `lib/markets.ts` — a hand-written list of six markets with invented
+prices, four of which (SOL, ARB, OP, DOGE) weren't wired to anything — has been deleted, along
+with its seeded candle/fill generators and the `SampleDataBanner` that labelled them. The market
+list now comes from Nado itself (`lib/nado/markets.ts`).
+
+That mattered more than it sounds: the homepage was the front door, and it showed six markets
+with authoritative-looking prices that were all wrong (BTC at $98,650 while the real market was
+~$79k). A banner said "sample data", but a price table on a trading site is read as fact.
+
+Assembling ~75 markets naively would mean ~150 requests, since `funding_rate` and
+`market_snapshots` each take a single `product_id`. Four bulk calls cover it instead:
+`symbols` and `all_products` (gateway) for tickers, prices and open interest;
+`market_snapshots` with **no** `product_id` — its `cumulative_volumes`/`oracle_prices` maps then
+span all ~90 products at once; and `funding_rates` (plural), which takes `product_ids[]`. The two
+indexer calls are best-effort, so a failure degrades those columns to "—" rather than emptying
+the page.
 
 `lib/nado/` is **real, and targets mainnet**: verified against Nado's actual TypeScript SDK
 ([nadohq/nado-typescript-sdk](https://github.com/nadohq/nado-typescript-sdk)) and live-tested
 against `gateway.prod.nado.xyz` from this environment — endpoints, EIP-712 domains/types for
 `place_order`/`mint_nlp`/`burn_nlp`, and the `endpoint` (sequencer) contract address all came
-from the SDK source or a live API response, not invented. `useLiveMarket` pulls real price,
-open interest, funding rate, and 24h volume/change for BTC-PERP/ETH-PERP — those are the only
-two product IDs identified with confidence (product 3's spot token is `0x4200...0006`, the
-canonical WETH predeploy shared by every OP-Stack chain — about as strong a cross-check as this
-gets), since the gateway's `all_products` response has no symbol/ticker field for the rest. (It
-turns out a `symbols` query type does exist and returns real ticker names for every product —
-found while probing the gateway for this feature — but expanding market coverage with it is a
-separate, not-yet-done piece of work.)
+from the SDK source or a live API response, not invented.
+
+Market coverage was for a long time limited to BTC-PERP/ETH-PERP, because `all_products` carries
+no ticker field and those two were the only product ids identifiable from price alone (plus
+product 3's spot token being `0x4200...0006`, the WETH predeploy every OP-Stack chain shares).
+The `symbols` query solved that — it returns real ticker names for every product — and every
+market is now listed and tradeable through it.
 
 Price and open interest come from the low-latency gateway (`client.ts`); funding rate and 24h
 volume/change do not exist there at all — probing the gateway with an invalid query type
@@ -106,7 +122,7 @@ price change matched an actual ~7.5%/~18% BTC/ETH move that happened during this
 the resulting 24h volume figures ($436M BTC, $114M ETH) are the right order of magnitude for an
 active perp market.
 
-The candlestick chart and recent-trades tape are real too, for BTC-PERP/ETH-PERP, from the same
+The candlestick chart and recent-trades tape are real too, for every market, from the same
 archive service. `candlesticks` (`product_id`, `granularity` in seconds) returns a fixed window
 of ~100 recent buckets, newest first — there's no count/range parameter (a `limit` field is
 silently ignored), so a given timeframe's window is fixed at ~100 buckets of that size. The chart
@@ -160,10 +176,10 @@ queries), now fixed by changing the default to `"default"`. It means the earlier
 almost certainly wasn't about deposits at all — it was signed against a subaccount that was never
 going to have any. The read side of the fix is confirmed against a real funded account — a real
 user's `/portfolio` page went from showing "no Nado account" to the exact equity figure Nado's own
-site shows for that wallet. The write side (an order or mint/burn actually landing correctly
-post-fix) has not — `OrderForm` and `NlpVaultForm` both carry a `BetaTradingWarning` reflecting
-exactly this, and mint/burn remains fully unconfirmed on top of it — the honesty boundary lives in
-the UI, not just in this file.
+site shows for that wallet. The write side has since been confirmed too — a real order placed,
+rested and cancelled, and a real NLP mint and burn — all covered further down. `OrderForm` and
+`NlpVaultForm` still carry a `BetaTradingWarning`, now covering the fee economics rather than
+unverified signing: the honesty boundary lives in the UI, not just in this file.
 
 `/portfolio` and the homepage's "Your account" card are real for any connected wallet, from the
 gateway's `subaccount_info` query plus the indexer's `matches` query — both confirmed against
@@ -327,10 +343,10 @@ The order book (`OrderBook`, `orderbook.ts`) is real, live-refetched every 3s: `
 best-price-first — verified live that `depth` is a real, respected row-count limit (10 → exactly
 10 rows, 50 → exactly 50), unlike `candlesticks`' silently-ignored `limit`.
 
-Open orders (`/portfolio`, `OpenOrdersTable`) are real too, from `subaccount_orders` — confirmed
-to be per-product (it errors for a missing `product_id` separately from a missing `sender`), so
-unlike `subaccount_info` this has to be queried once per market; scoped to BTC-PERP/ETH-PERP,
-the only markets this app can place orders in. `unfilled_amount`, not `amount`, is the real
+Open orders (`/portfolio`, `OpenOrdersTable`) are real too, covering every market in one call via
+the gateway's plural `orders` query (see the note further down on why the singular
+`subaccount_orders` and the indexer's same-named query both fall short).
+`unfilled_amount`, not `amount`, is the real
 remaining size, since a resting order can be partially filled without leaving the book — found by
 inspecting a real order with actual resting size, not assumed. `order_type` comes back as an
 already-decoded string ("post_only", etc.) rather than the raw `appendix` bitfield.
@@ -359,13 +375,18 @@ real book → read back through `subaccount_orders` → cancel → gone. Verifie
 the gateway rather than from this app's own UI (order count 1 → 0, no position opened, equity
 unchanged at ~$4.00 across the round trip).
 
-The candle/fill generators in `lib/markets.ts` — still used for every market other than
-BTC-PERP/ETH-PERP — use a seeded PRNG (`mulberry32`), not `Math.random()` or `Date.now()` —
-deterministic output is required here, not just nice-to-have: anything render-time-dependent
-produces different values during SSR vs. hydration and throws a React hydration-mismatch error.
-`formatDateTime` pins `timeZone: "UTC"` for the same reason. (This doesn't apply to the live
-Nado data: `useLiveMarket`/`useLiveChart` fetch client-side only, inside `"use client"`
-components, so there's no SSR render to mismatch against.)
+Open orders needed rethinking once every market was listed: the gateway's `subaccount_orders`
+takes one `product_id`, which would be ~75 requests. The plural `orders` query takes
+`product_ids[]` and returns a `product_orders` array — one call for the whole book. The
+indexer's own `orders` query is *not* a substitute despite the name: it returns order history
+(every row carries fills and realized PnL) and omits never-filled orders entirely — verified
+against an account where the gateway reported 2 resting orders on a product while the indexer
+returned 100 rows, none unfilled. Only the gateway sees the live book.
+
+`formatDateTime` pins `timeZone: "UTC"` to avoid SSR/hydration mismatches. That class of bug is
+mostly moot now — every data path fetches client-side inside `"use client"` components, so
+there's no server render to diverge from — but the pin costs nothing and the failure mode is
+obscure enough to be worth keeping.
 
 ## Usage
 

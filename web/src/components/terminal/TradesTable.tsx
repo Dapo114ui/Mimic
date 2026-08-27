@@ -1,4 +1,4 @@
-import type { Fill } from "@/lib/markets";
+import type { Fill } from "@/lib/types";
 import { formatDateTime, formatPrice, formatUsd } from "@/lib/format";
 import { SideBadge } from "@/components/terminal/SideBadge";
 

@@ -1,5 +1,5 @@
 import { NADO_INDEXER_REST } from "./config";
-import type { Candle, Fill } from "@/lib/markets";
+import type { Candle, Fill } from "@/lib/types";
 
 type IndexerResponse<T> = T | { reason: string; block: true };
 
@@ -83,7 +83,7 @@ type CandlesticksResponse = { candlesticks: CandlestickRow[] };
 // with a `limit` field, which is silently ignored) — it just returns its fixed window, ~100
 // most-recent buckets at the given granularity, newest first; reversed here since chart series
 // need ascending time order. `time` comes back as a unix-second number, not the "YYYY-MM-DD"
-// string the sample generator in `lib/markets.ts` uses — fine, `Candle.time` accepts both, and
+// string a chart lib might expect — fine, `Candle.time` accepts both, and
 // `CandlestickChart` casts to lightweight-charts' `Time` type at the point it's actually used.
 export async function getLiveCandles(productId: number, granularitySec = 3600): Promise<Candle[]> {
   const { candlesticks } = await nadoIndexerQuery<CandlesticksResponse>("candlesticks", {

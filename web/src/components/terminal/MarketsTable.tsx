@@ -2,37 +2,52 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { Market } from "@/lib/markets";
+import type { LiveMarket } from "@/lib/nado/markets";
 import { formatFundingRate, formatPrice, formatSignedPct, formatUsd } from "@/lib/format";
 
 type SortKey = "change24hPct" | "volume24hUsd" | "openInterestUsd";
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: "change24hPct", label: "24h change" },
   { key: "volume24hUsd", label: "Volume" },
+  { key: "change24hPct", label: "24h change" },
   { key: "openInterestUsd", label: "Open interest" },
 ];
 
-export function MarketsTable({ markets }: { markets: Market[] }) {
+export function MarketsTable({ markets }: { markets: LiveMarket[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("volume24hUsd");
+  const [query, setQuery] = useState("");
 
-  const rows = useMemo(() => [...markets].sort((a, b) => b[sortKey] - a[sortKey]), [markets, sortKey]);
+  const rows = useMemo(() => {
+    const q = query.trim().toUpperCase();
+    const filtered = q ? markets.filter((m) => m.symbol.toUpperCase().includes(q)) : markets;
+    // Markets with no data for the active sort sink to the bottom rather than sorting as 0,
+    // which would otherwise scatter them through the middle of the table.
+    return [...filtered].sort((a, b) => (b[sortKey] ?? -Infinity) - (a[sortKey] ?? -Infinity));
+  }, [markets, sortKey, query]);
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-end gap-1 text-xs text-mist-dim">
-        <span className="mr-1">Sort by</span>
-        {SORT_OPTIONS.map((opt) => (
-          <button
-            key={opt.key}
-            onClick={() => setSortKey(opt.key)}
-            className={`rounded-full px-3 py-1.5 font-medium transition ${
-              sortKey === opt.key ? "bg-white/10 text-foreground" : "hover:text-mist"
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={`Search ${markets.length} markets…`}
+          className="w-full max-w-xs rounded-full border border-white/10 bg-ink-950 px-4 py-2 text-sm text-foreground outline-none placeholder:text-mist-dim focus:border-accent/50"
+        />
+        <div className="flex items-center gap-1 text-xs text-mist-dim">
+          <span className="mr-1">Sort by</span>
+          {SORT_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => setSortKey(opt.key)}
+              className={`rounded-full px-3 py-1.5 font-medium transition ${
+                sortKey === opt.key ? "bg-white/10 text-foreground" : "hover:text-mist"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-white/10">
@@ -49,13 +64,13 @@ export function MarketsTable({ markets }: { markets: Market[] }) {
           </thead>
           <tbody>
             {rows.map((market) => {
-              const isUp = market.change24hPct >= 0;
+              const isUp = (market.change24hPct ?? 0) >= 0;
               return (
-                <tr key={market.symbol} className="border-b border-white/5 last:border-0 hover:bg-white/[0.03]">
+                <tr key={market.productId} className="border-b border-white/5 last:border-0 hover:bg-white/[0.03]">
                   <td className="px-5 py-4 align-middle">
                     <Link href={`/markets/${market.symbol}`} className="group flex flex-col">
                       <span className="font-medium text-foreground group-hover:text-accent">{market.symbol}</span>
-                      <span className="text-xs text-mist-dim">{market.name}</span>
+                      {!market.isLive && <span className="text-xs text-amber-300/70">not trading</span>}
                     </Link>
                   </td>
                   <td className="px-5 py-4 text-right align-middle font-mono text-foreground">
@@ -63,20 +78,24 @@ export function MarketsTable({ markets }: { markets: Market[] }) {
                   </td>
                   <td
                     className={`px-5 py-4 text-right align-middle font-mono font-medium ${
-                      isUp ? "text-emerald-400" : "text-rose-400"
+                      market.change24hPct === null ? "text-mist-dim" : isUp ? "text-emerald-400" : "text-rose-400"
                     }`}
                   >
-                    {formatSignedPct(market.change24hPct)}
+                    {market.change24hPct === null ? "—" : formatSignedPct(market.change24hPct)}
                   </td>
                   <td className="px-5 py-4 text-right align-middle font-mono text-mist">
-                    {formatUsd(market.volume24hUsd)}
+                    {market.volume24hUsd === null ? "—" : formatUsd(market.volume24hUsd)}
                   </td>
                   <td
                     className={`px-5 py-4 text-right align-middle font-mono text-xs ${
-                      market.fundingRatePct >= 0 ? "text-emerald-400/80" : "text-rose-400/80"
+                      market.fundingRatePct === null
+                        ? "text-mist-dim"
+                        : market.fundingRatePct >= 0
+                          ? "text-emerald-400/80"
+                          : "text-rose-400/80"
                     }`}
                   >
-                    {formatFundingRate(market.fundingRatePct)}
+                    {market.fundingRatePct === null ? "—" : formatFundingRate(market.fundingRatePct)}
                   </td>
                   <td className="px-5 py-4 text-right align-middle font-mono text-mist">
                     {formatUsd(market.openInterestUsd)}
@@ -84,6 +103,13 @@ export function MarketsTable({ markets }: { markets: Market[] }) {
                 </tr>
               );
             })}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-5 py-10 text-center text-sm text-mist-dim">
+                  No markets match &ldquo;{query}&rdquo;
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
