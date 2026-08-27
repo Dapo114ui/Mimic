@@ -131,6 +131,14 @@ export function NlpVaultForm() {
               deposit. Consider minting more to make it worthwhile.
             </p>
           )}
+          {mode === "burn" && (
+            <p className="mt-1.5 text-xs text-mist-dim">
+              Burning also charges a fee, and Nado rejects any burn worth less than it — a real
+              0.9 NLP (~$0.96) burn was rejected on that basis, so the fee is at least that. Nado
+              doesn&apos;t expose the exact figure anywhere, so this can only be bounded, not
+              stated. Burn well above ~1 NLP, or expect a rejection.
+            </p>
+          )}
         </label>
 
         {!isConnected ? (
