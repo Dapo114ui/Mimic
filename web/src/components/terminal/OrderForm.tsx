@@ -5,6 +5,7 @@ import { parseUnits } from "viem";
 import { useAccount, useSignTypedData } from "wagmi";
 import { encodeSubaccount, generateNonce, getOrderDomain, ORDER_TYPES } from "@/lib/nado/eip712";
 import { nadoExecute } from "@/lib/nado/client";
+import { useFeeRates } from "@/lib/nado/useFeeRates";
 import { formatUsd } from "@/lib/format";
 import { BetaTradingWarning } from "./BetaTradingWarning";
 
@@ -22,6 +23,7 @@ type Status =
 export function OrderForm({ productId }: { productId: number }) {
   const { address, isConnected } = useAccount();
   const { signTypedDataAsync } = useSignTypedData();
+  const { data: fees } = useFeeRates(address);
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [size, setSize] = useState("");
@@ -166,10 +168,42 @@ export function OrderForm({ productId }: { productId: number }) {
         </label>
 
         {notional !== null && (
-          <p className={`text-xs ${notional < MIN_NOTIONAL_USD ? "text-amber-300" : "text-mist-dim"}`}>
-            Order value {formatUsd(notional)}
-            {notional < MIN_NOTIONAL_USD && ` — below Nado's ${formatUsd(MIN_NOTIONAL_USD)} minimum`}
-          </p>
+          <div className="space-y-1 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-mist-dim">Order value</span>
+              <span className={`font-mono ${notional < MIN_NOTIONAL_USD ? "text-amber-300" : "text-mist"}`}>
+                {formatUsd(notional)}
+              </span>
+            </div>
+            {notional < MIN_NOTIONAL_USD && (
+              <p className="text-amber-300">Below Nado&apos;s {formatUsd(MIN_NOTIONAL_USD)} minimum order value</p>
+            )}
+            {fees && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-mist-dim">
+                    Fee if it rests (maker {(fees.makerRateFor(productId) * 100).toFixed(3)}%)
+                  </span>
+                  <span className="font-mono text-mist">
+                    {formatUsd(notional * fees.makerRateFor(productId))}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-mist-dim">
+                    Fee if it fills now (taker {(fees.takerRateFor(productId) * 100).toFixed(3)}%)
+                  </span>
+                  <span className="font-mono text-mist">
+                    {formatUsd(notional * fees.takerRateFor(productId))}
+                  </span>
+                </div>
+                <p className="pt-0.5 text-mist-dim">
+                  Your real rates from Nado (fee tier {fees.feeTier}) — a limit order pays the
+                  maker rate if it rests on the book, the taker rate if it crosses and fills
+                  immediately.
+                </p>
+              </>
+            )}
+          </div>
         )}
 
         {!isConnected ? (

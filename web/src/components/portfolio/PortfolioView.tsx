@@ -5,6 +5,7 @@ import { usePortfolio } from "@/lib/nado/usePortfolio";
 import { ConnectButton } from "@/components/ConnectButton";
 import { SideBadge } from "@/components/terminal/SideBadge";
 import { OpenOrdersTable } from "@/components/portfolio/OpenOrdersTable";
+import { FeeSchedule } from "@/components/portfolio/FeeSchedule";
 import { formatDateTime, formatSignedPct, formatUsd } from "@/lib/format";
 
 export function PortfolioView() {
@@ -166,6 +167,14 @@ export function PortfolioView() {
             </table>
           </div>
         )}
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-lg font-medium text-foreground">Fees</h2>
+        <p className="mt-1 text-xs text-mist-dim">
+          What trading and using the vault actually costs on this account.
+        </p>
+        <FeeSchedule />
       </section>
     </>
   );
