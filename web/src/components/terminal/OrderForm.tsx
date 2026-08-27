@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import { parseUnits } from "viem";
 import { useAccount, useSignTypedData } from "wagmi";
 import { encodeSubaccount, generateNonce, getOrderDomain, ORDER_TYPES } from "@/lib/nado/eip712";
 import { nadoExecute } from "@/lib/nado/client";
@@ -25,9 +26,7 @@ export function OrderForm({ productId }: { productId: number }) {
     event.preventDefault();
     if (!address) return;
 
-    const sizeNum = Number(size);
-    const priceNum = Number(price);
-    if (!sizeNum || sizeNum <= 0 || !priceNum || priceNum <= 0) {
+    if (Number(size) <= 0 || Number(price) <= 0 || !Number.isFinite(Number(size)) || !Number.isFinite(Number(price))) {
       setStatus({ type: "error", message: "Enter a valid size and price" });
       return;
     }
@@ -36,8 +35,18 @@ export function OrderForm({ productId }: { productId: number }) {
 
     try {
       const sender = encodeSubaccount(address);
-      const amount = BigInt(Math.round(sizeNum * 1e18)) * (side === "buy" ? 1n : -1n);
-      const priceX18 = BigInt(Math.round(priceNum * 1e18));
+      // Scale from the raw input STRING, never via `Number(x) * 1e18` — float64 can't hold an
+      // 18-decimal-scaled price exactly, so that silently corrupted the low digits: a real order
+      // at a clean price of 79064 went out as 79063999999999993708544 and was rejected with
+      // "not divisible by the price_increment_x18". The user's input was valid; the arithmetic
+      // wasn't. `parseUnits` does exact decimal-string → BigInt scaling with no float step.
+      const amountMagnitude = parseUnits(size, 18);
+      const priceX18 = parseUnits(price, 18);
+      if (amountMagnitude <= 0n || priceX18 <= 0n) {
+        setStatus({ type: "error", message: "Size and price are too small to submit" });
+        return;
+      }
+      const amount = amountMagnitude * (side === "buy" ? 1n : -1n);
       const nonce = generateNonce();
       const expiration = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
       // version 1 (lowest 8 bits), not isolated, order type 0 (DEFAULT/standard limit order),

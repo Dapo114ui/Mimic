@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
+import { parseUnits } from "viem";
 import { useAccount, useSignTypedData } from "wagmi";
 import { BURN_NLP_TYPES, encodeSubaccount, getEndpointDomain, MINT_NLP_TYPES } from "@/lib/nado/eip712";
 import { nadoExecute } from "@/lib/nado/client";
@@ -29,7 +30,7 @@ export function NlpVaultForm() {
     event.preventDefault();
     if (!address) return;
 
-    if (!amountNum || amountNum <= 0) {
+    if (!amountNum || amountNum <= 0 || !Number.isFinite(amountNum)) {
       setStatus({ type: "error", message: "Enter a valid amount" });
       return;
     }
@@ -38,7 +39,13 @@ export function NlpVaultForm() {
 
     try {
       const sender = encodeSubaccount(address);
-      const scaledAmount = BigInt(Math.round(amountNum * 1e18));
+      // Exact decimal-string scaling, not `Number(x) * 1e18` — see the same fix in OrderForm:
+      // float64 silently corrupts the low digits of an 18-decimal-scaled value.
+      const scaledAmount = parseUnits(amount, 18);
+      if (scaledAmount <= 0n) {
+        setStatus({ type: "error", message: "Amount is too small to submit" });
+        return;
+      }
       // mint_nlp/burn_nlp use the strictly-sequential tx_nonce, not the timestamp-based nonce
       // orders use — fetched fresh right before signing since it's a "must equal exactly" value,
       // not just "must be greater than last used".

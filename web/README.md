@@ -248,6 +248,20 @@ lands ~90s early, inside the cap; take up to ~90s and it still beats the deadlin
 sitting unconfirmed past that will fail and need re-signing, which `OrderForm` says up front
 rather than letting it surface as a confusing gateway error.
 
+Past that, the next real order surfaced a plain arithmetic bug of this codebase's own making —
+not a protocol quirk. Scaling a user's input with `BigInt(Math.round(value * 1e18))` looks
+harmless but float64 has ~15-17 significant digits and an 18-decimal-scaled price needs far more,
+so the low digits were silently garbage: a clean price of `79064` went out as
+`79063999999999993708544` and the gateway rejected it as "not divisible by the
+`price_increment_x18`". The input was valid; the arithmetic wasn't — worth stressing because the
+error message points at the price, which makes it read like user error. Both `OrderForm` and
+`NlpVaultForm` now scale with viem's `parseUnits(str, 18)` straight off the input string, with no
+float step anywhere: exact for every case checked (`79064`, `1.1`, `0.001`, `0.00005`, `0.3`),
+where the old path was wrong for `79064` and `1.1` among others. Re-verified end to end by
+replaying the exact rejected order (0.001 @ 79064) against the live gateway with the corrected
+scaling — it now clears every validation stage and stops only at signature verification, which is
+as far as an unsigned probe can reach.
+
 With both fixes live, a real mint against a real funded account went through — the gateway
 accepted it, no error, `nadoExecute` resolved successfully. Mint is confirmed working end to end,
 not just mechanically. Burn hasn't been separately tested, but shares the identical `tx`-object
