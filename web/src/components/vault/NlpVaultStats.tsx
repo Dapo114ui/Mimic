@@ -2,6 +2,7 @@
 
 import { useAccount } from "wagmi";
 import { useNlpVault } from "@/lib/nado/useNlpVault";
+import { MEASURED_BURN_FEE_USD, MEASURED_MINT_FEE_USD } from "@/lib/nado/fees";
 import { formatDateTime, formatPrice, formatUsd } from "@/lib/format";
 
 export function NlpVaultStats() {
@@ -41,6 +42,21 @@ export function NlpVaultStats() {
         <Stat label="Total supply" value={supply} />
         <Stat label="TVL" value={tvl} />
         <Stat label="Your NLP balance" value={balanceValue} sub={balanceUsd} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-xs">
+        <span className="text-mist-dim">
+          Mint fee <span className="font-mono text-mist">{formatUsd(MEASURED_MINT_FEE_USD)}</span>
+        </span>
+        <span className="text-mist-dim">
+          Burn fee <span className="font-mono text-mist">{formatUsd(MEASURED_BURN_FEE_USD)}</span>
+        </span>
+        <span className="text-mist-dim">
+          Round trip <span className="font-mono text-amber-300">{formatUsd(MEASURED_MINT_FEE_USD + MEASURED_BURN_FEE_USD)}</span>
+        </span>
+        <span className="text-mist-dim">
+          Flat, not proportional — measured from real transactions, not published by Nado.
+        </span>
       </div>
 
       {isConnected && !isLockLoading && lockStatus && lockStatus.locks.length > 0 && (

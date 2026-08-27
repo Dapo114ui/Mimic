@@ -2,14 +2,9 @@
 
 import { useAccount } from "wagmi";
 import { useFeeRates } from "@/lib/nado/useFeeRates";
+import { MEASURED_BURN_FEE_USD, MEASURED_MINT_FEE_USD } from "@/lib/nado/fees";
 import { KNOWN_PRODUCTS, NADO_QUOTE_TOKEN } from "@/lib/nado/config";
 import { formatUsd } from "@/lib/format";
-
-// Measured from the indexer's own event ledger for a real account, because Nado exposes neither
-// figure through any query: a $1 mint deducted exactly $2.00 of quote for ~$1.00 of NLP, and
-// burning that NLP back cost exactly $2.00 of equity. Flat, not proportional.
-const MEASURED_MINT_FEE_USD = 1;
-const MEASURED_BURN_FEE_USD = 2;
 
 function Row({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (

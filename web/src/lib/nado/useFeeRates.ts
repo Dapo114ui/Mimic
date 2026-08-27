@@ -2,7 +2,17 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
-import { getFeeRates } from "./fees";
+import { getBaseFeeRates, getFeeRates } from "./fees";
+
+// Standard rates — no wallet required, so this works for any visitor.
+export function useBaseFeeRates() {
+  return useQuery({
+    queryKey: ["nado-base-fee-rates"],
+    queryFn: getBaseFeeRates,
+    staleTime: 10 * 60_000,
+    refetchInterval: false,
+  });
+}
 
 // Fee schedule changes rarely (only when the account's volume tier moves), so this is cached
 // hard rather than polled like price data.
