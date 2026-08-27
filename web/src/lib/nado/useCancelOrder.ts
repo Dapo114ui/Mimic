@@ -2,13 +2,20 @@
 
 import { useState } from "react";
 import { useAccount, useSignTypedData } from "wagmi";
-import { CANCEL_ORDERS_TYPES, encodeSubaccount, getEndpointDomain } from "./eip712";
-import { getTxNonce } from "./account";
+import { CANCEL_ORDERS_TYPES, encodeSubaccount, generateNonce, getEndpointDomain } from "./eip712";
 import { nadoExecute } from "./client";
 
-// Same tx-wrapper/tx_nonce pattern confirmed for mint_nlp/burn_nlp, and the same EIP-712 domain
-// (endpoint/sequencer contract, not the per-product order-verifying address place_order uses) —
-// confirmed against the SDK's cancelOrders() (packages/client/src/apis/market/MarketExecuteAPI.ts).
+// Signs against the endpoint/sequencer contract, not the per-product order-verifying address
+// place_order uses — confirmed against the SDK's cancelOrders()
+// (packages/client/src/apis/market/MarketExecuteAPI.ts).
+//
+// The nonce is the ORDER-style recv_time-encoded one (`generateNonce`), NOT the sequential
+// `tx_nonce` that mint_nlp/burn_nlp need. This was originally the other way round here, inferred
+// from cancel_orders sharing their `{tx: {...}, signature}` payload shape — a misleading signal:
+// payload shape does not predict nonce class. A real cancel failed with "Request received after
+// 'recv_time'" (the sequential counter, 1, decodes as a 1970 timestamp). Verified both ways
+// against the live gateway on a real resting order: tx_nonce reproduces that exact rejection,
+// while a recv_time nonce clears every stage through to signature verification.
 export function useCancelOrder() {
   const { address } = useAccount();
   const { signTypedDataAsync } = useSignTypedData();
@@ -21,7 +28,7 @@ export function useCancelOrder() {
     setError(null);
     try {
       const sender = encodeSubaccount(address);
-      const nonce = await getTxNonce(address);
+      const nonce = generateNonce();
       const productIds = [productId];
       const digests = [digest as `0x${string}`];
 
