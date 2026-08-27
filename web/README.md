@@ -66,7 +66,7 @@ src/
       usePortfolio.ts             # subaccount_info + trade history + symbols, combined, for the
                                    # connected wallet
       useOpenOrders.ts              # subaccount_orders across BTC-PERP/ETH-PERP, merged
-      useCancelOrder.ts              # signs + submits a real cancel_orders — unconfirmed, see below
+      useCancelOrder.ts              # signs + submits a real cancel_orders — confirmed working
       useNlpVault.ts               # NLP price/supply/TVL (no wallet needed) + your own balance
                                     # and locked/unlocked breakdown (needs one), for /vault
 ```
@@ -326,9 +326,21 @@ incomplete body, follow "missing field" errors: `tx` → `sender` → `productId
 `getNadoEIP712Types.ts`: the primary type name is **`Cancellation`**, not the more obvious
 `CancelOrders`, with `productIds` typed `uint32[]` specifically; verifies against the endpoint
 contract, same domain as mint/burn, confirmed against `MarketExecuteAPI.ts`'s `cancelOrders()`.
-Like mint/burn before their first real test, this hasn't actually been round-tripped against a
-resting order yet — `PortfolioView` says so directly under "Open orders" rather than implying
-it's confirmed because it looks the same as something that is.
+
+The shared payload shape then produced one genuinely wrong inference: because `cancel_orders`
+looks like `mint_nlp`/`burn_nlp` on the wire, this code originally used their sequential
+`tx_nonce` too. It doesn't — `cancel_orders` takes the ORDER-style recv_time-encoded nonce. A
+real cancel on a real resting order failed with "Request received after 'recv_time'" (the
+account's actual `tx_nonce` of `1` decodes as a 1970 timestamp). Verified both ways live against
+that same resting order before changing anything: `tx_nonce` reproduces the exact rejection, a
+recv_time nonce clears through to signature verification. The lesson worth keeping: **payload
+shape does not predict nonce class**, and three of this integration's bugs came from inferring
+one unverified property from a neighbouring verified one.
+
+With that fixed, the full order lifecycle is confirmed end to end on mainnet: place → rest on the
+real book → read back through `subaccount_orders` → cancel → gone. Verified independently from
+the gateway rather than from this app's own UI (order count 1 → 0, no position opened, equity
+unchanged at ~$4.00 across the round trip).
 
 The candle/fill generators in `lib/markets.ts` — still used for every market other than
 BTC-PERP/ETH-PERP — use a seeded PRNG (`mulberry32`), not `Math.random()` or `Date.now()` —

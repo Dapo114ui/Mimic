@@ -110,10 +110,9 @@ export function PortfolioView() {
       <section className="mt-10">
         <h2 className="text-lg font-medium text-foreground">Open orders</h2>
         <p className="mt-1 text-xs text-mist-dim">
-          BTC-PERP and ETH-PERP only — the only markets you can place orders in here. Cancel
-          signs and submits a real cancellation using the same signing path as order placement,
-          but hasn&apos;t been round-tripped against a real order yet — check the result before
-          assuming it went through.
+          BTC-PERP and ETH-PERP only — the only markets you can place orders in here. Placing and
+          cancelling are both confirmed working end to end against a real resting order on
+          mainnet.
         </p>
         <OpenOrdersTable />
       </section>

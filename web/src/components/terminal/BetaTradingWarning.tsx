@@ -7,12 +7,12 @@ export function BetaTradingWarning({ context = "order" }: { context?: "order" | 
         connected wallet.{" "}
         {context === "order" ? (
           <>
-            Signing and submission are confirmed working — a real signed order against a real
-            funded account has round-tripped to the gateway. A live protocol change surfaced
-            along the way (Nado bumped its required order-version field; a real order was
-            rejected with the exact mismatch, since fixed) — worth knowing this integration
-            depends on values that can drift as Nado itself evolves, not just on Mimic&apos;s own
-            code being correct once.
+            The full order lifecycle is confirmed working on mainnet — a real order was placed,
+            rested on Nado&apos;s live book, and was cancelled again, all through this app.
+            Getting there took four real fixes, one of them a live protocol change on Nado&apos;s
+            side, so treat this integration as something that can drift as Nado evolves rather
+            than as settled. Orders must be worth at least $100, and your size is capped by
+            available margin.
           </>
         ) : (
           <>

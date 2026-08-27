@@ -5,7 +5,13 @@ import { parseUnits } from "viem";
 import { useAccount, useSignTypedData } from "wagmi";
 import { encodeSubaccount, generateNonce, getOrderDomain, ORDER_TYPES } from "@/lib/nado/eip712";
 import { nadoExecute } from "@/lib/nado/client";
+import { formatUsd } from "@/lib/format";
 import { BetaTradingWarning } from "./BetaTradingWarning";
+
+// Confirmed live: every perp product reports min_size 100 (identical across products priced from
+// $0.0026 to $73k, so it's a dollar floor, not a unit count), and a real $79 order was rejected
+// against it.
+const MIN_NOTIONAL_USD = 100;
 
 type Status =
   | { type: "idle" }
@@ -22,12 +28,30 @@ export function OrderForm({ productId }: { productId: number }) {
   const [price, setPrice] = useState("");
   const [status, setStatus] = useState<Status>({ type: "idle" });
 
+  // Display only — float math is fine here; the signed payload scales from the strings exactly.
+  // Surfaced because Nado silently requires this and rejects with a message that reads like the
+  // *price* is wrong ("...is too small. abs(amount) * price must be >= min_size"), which is a
+  // confusing way to learn your order was simply worth less than $100.
+  const sizeNum = Number(size);
+  const priceNum = Number(price);
+  const notional =
+    Number.isFinite(sizeNum) && Number.isFinite(priceNum) && sizeNum > 0 && priceNum > 0
+      ? sizeNum * priceNum
+      : null;
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!address) return;
 
-    if (Number(size) <= 0 || Number(price) <= 0 || !Number.isFinite(Number(size)) || !Number.isFinite(Number(price))) {
+    if (notional === null) {
       setStatus({ type: "error", message: "Enter a valid size and price" });
+      return;
+    }
+    if (notional < MIN_NOTIONAL_USD) {
+      setStatus({
+        type: "error",
+        message: `Order value ${formatUsd(notional)} is below Nado's ${formatUsd(MIN_NOTIONAL_USD)} minimum`,
+      });
       return;
     }
 
@@ -140,6 +164,13 @@ export function OrderForm({ productId }: { productId: number }) {
             className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-4 py-2.5 font-mono text-foreground outline-none focus:border-accent/50"
           />
         </label>
+
+        {notional !== null && (
+          <p className={`text-xs ${notional < MIN_NOTIONAL_USD ? "text-amber-300" : "text-mist-dim"}`}>
+            Order value {formatUsd(notional)}
+            {notional < MIN_NOTIONAL_USD && ` — below Nado's ${formatUsd(MIN_NOTIONAL_USD)} minimum`}
+          </p>
+        )}
 
         {!isConnected ? (
           <p className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-center text-sm text-mist-dim">
