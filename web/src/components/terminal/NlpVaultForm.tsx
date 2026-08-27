@@ -132,11 +132,13 @@ export function NlpVaultForm() {
             </p>
           )}
           {mode === "burn" && (
-            <p className="mt-1.5 text-xs text-mist-dim">
-              Burning also charges a fee, and Nado rejects any burn worth less than it — a real
-              0.9 NLP (~$0.96) burn was rejected on that basis, so the fee is at least that. Nado
-              doesn&apos;t expose the exact figure anywhere, so this can only be bounded, not
-              stated. Burn well above ~1 NLP, or expect a rejection.
+            <p className="mt-1.5 rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-amber-300">
+              Burning is expensive on small amounts. A real burn of 0.9387 NLP (~$1.00) reduced
+              account equity by <span className="font-medium">exactly $2.00</span> — it destroyed
+              the NLP and took ~$1.00 more from the quote balance. Nado also rejects burns below
+              a minimum (~$1.00 worth). Neither figure is exposed by any query, so both come from
+              real observed transactions. Only burn amounts large enough that a ~$2 hit is
+              acceptable.
             </p>
           )}
         </label>

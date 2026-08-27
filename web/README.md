@@ -294,11 +294,28 @@ What the SDK does confirm: `$1` is the protocol's literal minimum mint amount
 `packages/engine-client/src/types/engineErrorCodes.ts`) — the test mint hit that floor exactly,
 which is also almost exactly the flat fee, netting close to nothing. A separate, distinctly-named
 burn-side fee is confirmed to exist too (`BURN_NLP_AMOUNT_TOO_SMALL`, "amount is less than or
-equal to the burning fee") but its magnitude isn't exposed anywhere client-side — the actual fee
-formula for either direction lives in Solidity contracts outside this SDK's repo, unreachable from
-here. `NlpVaultForm` now warns in the mint flow: a persistent note that mint fees are flat (so
-size matters), and a stronger inline warning once the entered amount is small enough that ~$1
-would eat a meaningful share of it.
+equal to the burning fee"). Neither magnitude is exposed by any query — the fee logic lives in
+Solidity outside the SDK's repo — so both were measured from real transactions instead, read off
+the indexer's own `events` ledger for the account:
+
+```
+deposit_collateral  quote  0.000000 -> 5.000000   (+5.000000)
+mint_nlp            quote  5.000019 -> 3.000019   (-2.000000)   for ~$1.00 of NLP
+mint_nlp            NLP    0.000000 -> 0.938700   (+0.938700)
+burn_nlp            quote  3.000210 -> 2.003271   (-0.996939)
+burn_nlp            NLP    0.938700 -> 0.000000   (-0.938700)
+```
+
+So: **minting cost $1.00 in fees; burning cost $2.00** — the burn destroyed ~$1.00 of NLP *and*
+took a further ~$1.00 out of quote. A $1 mint-then-burn round trip cost **$3.00 total**, taking a
+$5.00 balance to $2.00. Both fees are flat, not proportional: immaterial on a large position,
+ruinous on a small one.
+
+One thing deliberately not modelled: the rejection threshold and the actual charge disagree. A
+0.9 NLP (~$0.96) burn was rejected as "less than or equal to the burning fee", while 0.9387 NLP
+(~$1.00) was accepted and then charged $2.00 — so the minimum-size check and the fee itself use
+different constants. Both are invisible from outside, so `NlpVaultForm` states the observed
+numbers and their provenance rather than a tidy formula that can't be verified.
 
 One correction from before that: gateway queries that take parameters (`subaccount_info`) turned
 out to need POST `{type, ...params}` to `/query`, not the GET-with-querystring form `client.ts`

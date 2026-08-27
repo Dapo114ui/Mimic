@@ -16,11 +16,12 @@ export function BetaTradingWarning({ context = "order" }: { context?: "order" | 
           </>
         ) : (
           <>
-            Mint is confirmed working end to end — a real mint against a funded account went
-            through and the gateway accepted it, after two real bugs surfaced and got fixed along
-            the way (a missing <code>tx</code> wrapper, then a wrong nonce scheme). Burn uses the
-            identical signing/submission path and should work the same way, but hasn&apos;t been
-            separately tested yet.
+            Mint and burn are both confirmed working end to end against a real funded account.
+            Note the economics before using this at small size: a real $1 mint plus burn round
+            trip cost <span className="font-medium">$3.00 in fees</span> ($1 minting, $2 burning),
+            turning a $5 balance into $2. These are Nado&apos;s fees, not Mimic&apos;s, and they
+            are flat rather than proportional — negligible on a large position, ruinous on a
+            small one.
           </>
         )}{" "}
         Start with a small size and double-check what you&apos;re signing before confirming.
