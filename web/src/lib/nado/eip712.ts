@@ -118,10 +118,23 @@ export function generateNonce(): bigint {
 // protocol fork (already relied on elsewhere: the "Cancellation" EIP-712 type name, the
 // [initial, maintenance, unweighted] health group ordering) and Vertex's own OrderType enum is
 // exactly {DEFAULT, IOC, FOK, POST_ONLY} in that order — matching both confirmed endpoints (0,
-// 3) exactly, so 1 and 2 are taken to be IOC and FOK respectively even though this account has
-// never held an order of either type. IOC (immediate-or-cancel: cross whatever is available
-// right now, cancel the remainder instead of resting) is the standard way CLOB protocols in
-// this family implement "market" orders, which is what MARKET.IOC is used for below.
+// 3) exactly, so 1 and 2 are taken to be IOC and FOK respectively.
+//
+// appendix=513 (IOC) is now confirmed live, not just inferred: a real `place_order` built with
+// this exact appendix, a real product/sender/nonce/expiration, and a price computed by this
+// form's own market-order logic against a real live order book — but signed by an unrelated
+// throwaway key — was submitted straight to the gateway. It came back "The provided signature
+// does not match with the sender's or the linked signer's" (error_code 2028), the same
+// signer-mismatch stage a fully valid order would also have to clear, not an order-type or
+// version rejection. A control run with the same throwaway-signed shape but a deliberately
+// invalid appendix (version 99) came back "Invalid Order Version" instead — proving appendix
+// content genuinely gets validated before that signer check, so IOC's clean pass through it
+// means order type 1 is accepted, not just unreached. What's still unconfirmed is Nado's own
+// semantics for it (does it actually behave as immediate-or-cancel) — that needs a real wallet
+// to sign and a real fill/cancel to observe, which this sandbox can't do.
+// IOC (immediate-or-cancel: cross whatever is available right now, cancel the remainder instead
+// of resting) is the standard way CLOB protocols in this family implement "market" orders, which
+// is what MARKET.IOC is used for below.
 const ORDER_VERSION = 1n;
 const ORDER_TYPE_BIT = 9n;
 

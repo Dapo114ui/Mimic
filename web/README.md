@@ -401,11 +401,26 @@ name, the `[initial, maintenance, unweighted]` health group order) and Vertex's 
 enum is exactly `{DEFAULT, IOC, FOK, POST_ONLY}` in that order, which matches both confirmed
 endpoints exactly. IOC (immediate-or-cancel — cross whatever's available right now, cancel the
 rest instead of resting) is the standard way this family of CLOB implements "market" orders, so
-that's what a market order here submits (`APPENDIX.IOC` in `eip712.ts`). This inference is
-strong — two of four enum slots are pinned by real data and the other two come from a known,
-already-relied-upon upstream protocol's own enum ordering — but unlike every other constant in
-this file, it hasn't been confirmed by placing one real IOC order and reading `order_type` back;
-that's the natural next verification step once a market order is actually sent from this app.
+that's what a market order here submits (`APPENDIX.IOC` in `eip712.ts`).
+
+`appendix=513` (IOC) has since been confirmed live, using the same throwaway-signature replay
+technique this file has relied on all along: a real `place_order` — a real product, a real
+sender, a real nonce/expiration, and a price computed by this app's own `marketLimitPriceX18`
+against BTC-PERP's real live order book — signed by an unrelated, freshly generated key and
+submitted straight to the gateway. It came back `"The provided signature does not match with
+the sender's or the linked signer's"` (error_code 2028) — the exact stage a fully valid order
+would also have to clear, not an order-type or version complaint. A control run, same
+throwaway-signing shape but a deliberately wrong appendix (version 99 instead of 1), came back
+`"Invalid Order Version"` instead — proving appendix content is validated *before* that signer
+check, so IOC sailing through it means order type 1 is genuinely accepted, not merely unreached.
+Both sides were checked (buy against the real best ask, sell against the real best bid), and both
+cleared to the same signer-mismatch stage. What that still doesn't confirm is Nado's own runtime
+*behavior* for it — whether it truly fills-and-cancels rather than resting — since that needs a
+real wallet to actually sign and a real fill or cancellation to observe, which this sandbox has
+no way to do (see the `OrderBook`/candlestick note above on why: the sandboxed headless Chromium
+can't reach either Nado service through this environment's outbound proxy at all, so this
+"submit a real payload with a throwaway signature straight to the gateway" method is what real
+verification looks like here, not a UI screenshot).
 
 A market order still needs *a* price to sign, since the order struct has no separate
 "market" flag — Vertex-family CLOBs implement it as an aggressively-priced limit order with an
