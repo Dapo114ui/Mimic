@@ -49,7 +49,8 @@ src/
     nado/
       config.ts                 # real gateway + indexer endpoints, chain ID, verified addresses
       eip712.ts                 # order/MintNlp/BurnNlp/Cancellation signing domains, types,
-                                 # subaccount encoding
+                                 # subaccount encoding, APPENDIX order-type constants (DEFAULT/
+                                 # IOC/FOK/POST_ONLY)
       client.ts                 # query()/execute() against the real gateway (POST-based)
       indexer.ts                 # funding_rate / market_snapshots / candlesticks /
                                   # matches_and_liquidations / account trade history against the
@@ -387,6 +388,44 @@ returned 100 rows, none unfilled. Only the gateway sees the live book.
 mostly moot now — every data path fetches client-side inside `"use client"` components, so
 there's no server render to diverge from — but the pin costs nothing and the failure mode is
 obscure enough to be worth keeping.
+
+`OrderForm` places market orders now, not just limit — Nado's own UI offers Market/Limit/Advanced
+tabs; this app matches the first two. The `appendix` bitfield's 2-bit order-type field (bits 9-10)
+has two directly-confirmed values: every plain order this form has ever placed used `appendix=1`
+(order type 0) and came back `order_type: "default"`; a real resting order was separately observed
+with `order_type: "post_only"` *and* `appendix: "1537"` in the same gateway response — 1537 =
+version(1) | 3<<9, confirming both the bit position and that order type 3 is post-only. The other
+two values (1, 2) are inferred, not directly observed on any account this session has touched:
+Nado is a Vertex protocol fork (already relied on elsewhere here — the `Cancellation` EIP-712 type
+name, the `[initial, maintenance, unweighted]` health group order) and Vertex's own `OrderType`
+enum is exactly `{DEFAULT, IOC, FOK, POST_ONLY}` in that order, which matches both confirmed
+endpoints exactly. IOC (immediate-or-cancel — cross whatever's available right now, cancel the
+rest instead of resting) is the standard way this family of CLOB implements "market" orders, so
+that's what a market order here submits (`APPENDIX.IOC` in `eip712.ts`). This inference is
+strong — two of four enum slots are pinned by real data and the other two come from a known,
+already-relied-upon upstream protocol's own enum ordering — but unlike every other constant in
+this file, it hasn't been confirmed by placing one real IOC order and reading `order_type` back;
+that's the natural next verification step once a market order is actually sent from this app.
+
+A market order still needs *a* price to sign, since the order struct has no separate
+"market" flag — Vertex-family CLOBs implement it as an aggressively-priced limit order with an
+IOC time-in-force. This app computes that price client-side: best available book level
+(`market_liquidity`, depth 1, on whichever side the order crosses) plus/minus a 1% slippage cap,
+rounded to the product's real `price_increment_x18` tick size. All of that arithmetic
+(`marketLimitPriceX18` in `OrderForm.tsx`) stays in BigInt, never float — the same corruption a
+real limit order hit once already (a clean price of 79064 went out as
+79063999999999993708544 via `Number(x) * 1e18`, rejected as "not divisible by the
+price_increment_x18") would reappear here if the book price were rounded through `Number` before
+being scaled. The 1% cap is this app's own choice, not something read off Nado — Nado's UI doesn't
+expose a number for it, and there's no query that would reveal one; it exists only so a thin book
+can't make an IOC "market" order chase price arbitrarily far before giving up and cancelling the
+remainder. `price_increment_x18` itself is real, though: it was already sitting unused in the
+`symbols` gateway response (`getLiveMarkets` now threads it through as `LiveMarket.priceIncrementX18`,
+a raw BigInt for the same exact-math reason).
+
+One consequence worth calling out: a market order always takes, never rests, so it only ever pays
+the taker fee rate — `OrderForm` drops the maker-fee line entirely when the Market tab is active
+rather than showing a maker rate that order type can never actually earn.
 
 ## Usage
 

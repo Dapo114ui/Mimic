@@ -61,7 +61,7 @@ export function MarketDetail({ symbol }: { symbol: string }) {
       </div>
 
       <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <OrderForm productId={productId} />
+        <OrderForm productId={productId} priceIncrementX18={market.priceIncrementX18} />
         <OrderBook productId={productId} />
       </div>
 

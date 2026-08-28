@@ -108,3 +108,26 @@ export function generateNonce(): bigint {
   const random = BigInt(Math.floor(Math.random() * 2 ** 20));
   return (recvTimeMs << 20n) | random;
 }
+
+// appendix bit layout: version:8 (bits 0-7), isolated:1 (bit 8), orderType:2 (bits 9-10),
+// reduceOnly:1 (bit 11), trigger:2 (bits 12-13), reserved:50, value:64. Two of the four
+// orderType values are directly confirmed against real gateway data: every plain order this
+// form has ever placed used appendix=1 (orderType 0) and came back `order_type: "default"`; a
+// real resting order was seen with `order_type: "post_only"` AND appendix "1537" in the same
+// response — 1537 = version(1) | 3<<9, so orderType 3 decodes to post_only. Nado is a Vertex
+// protocol fork (already relied on elsewhere: the "Cancellation" EIP-712 type name, the
+// [initial, maintenance, unweighted] health group ordering) and Vertex's own OrderType enum is
+// exactly {DEFAULT, IOC, FOK, POST_ONLY} in that order — matching both confirmed endpoints (0,
+// 3) exactly, so 1 and 2 are taken to be IOC and FOK respectively even though this account has
+// never held an order of either type. IOC (immediate-or-cancel: cross whatever is available
+// right now, cancel the remainder instead of resting) is the standard way CLOB protocols in
+// this family implement "market" orders, which is what MARKET.IOC is used for below.
+const ORDER_VERSION = 1n;
+const ORDER_TYPE_BIT = 9n;
+
+export const APPENDIX = {
+  DEFAULT: ORDER_VERSION,
+  IOC: ORDER_VERSION | (1n << ORDER_TYPE_BIT),
+  FOK: ORDER_VERSION | (2n << ORDER_TYPE_BIT),
+  POST_ONLY: ORDER_VERSION | (3n << ORDER_TYPE_BIT),
+} as const;

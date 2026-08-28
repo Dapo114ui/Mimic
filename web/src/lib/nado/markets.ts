@@ -19,6 +19,10 @@ export type LiveMarket = {
   fundingRatePct: number | null;
   openInterestUsd: number;
   isLive: boolean;
+  // Raw X18 tick size, kept as a BigInt (not the usual display `number`) so a market order can
+  // round its computed worst-case price to a valid tick with exact integer math — the same
+  // float-precision trap `OrderForm` already hit once for user-typed limit prices.
+  priceIncrementX18: bigint;
 };
 
 const fromX18 = (v: string) => Number(BigInt(v)) / 1e18;
@@ -26,7 +30,7 @@ const fromX18 = (v: string) => Number(BigInt(v)) / 1e18;
 type SymbolsResponse = {
   symbols: Record<
     string,
-    { product_id: number; symbol: string; type: string; trading_status?: string }
+    { product_id: number; symbol: string; type: string; trading_status?: string; price_increment_x18: string }
   >;
 };
 
@@ -109,6 +113,7 @@ export async function getLiveMarkets(): Promise<LiveMarket[]> {
       fundingRatePct: rate ? fromX18(rate) * 100 : null,
       openInterestUsd: fromX18(product.state.open_interest) * price,
       isLive: s.trading_status ? s.trading_status === "live" : true,
+      priceIncrementX18: BigInt(s.price_increment_x18),
     });
   }
 
