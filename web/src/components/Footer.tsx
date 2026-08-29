@@ -5,7 +5,7 @@ export function Footer() {
         <p>© {new Date().getFullYear()} Nadoterminal. Not affiliated with Nado.</p>
         <div className="flex items-center gap-6">
           <a
-            href="https://github.com/Dapo114ui/Mimic"
+            href="https://github.com/Dapo114ui/Nadoterminal"
             target="_blank"
             rel="noreferrer"
             className="transition hover:text-foreground"

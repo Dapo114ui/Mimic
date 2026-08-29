@@ -8,7 +8,7 @@ const NAV_LINKS = [
   { href: "/", label: "Markets" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/vault", label: "Vault" },
-  { href: "https://github.com/Dapo114ui/Mimic", label: "Source", external: true },
+  { href: "https://github.com/Dapo114ui/Nadoterminal", label: "Source", external: true },
 ];
 
 export function Navbar() {
