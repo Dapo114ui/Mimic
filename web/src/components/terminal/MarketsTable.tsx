@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { LiveMarket } from "@/lib/nado/markets";
 import { formatFundingRate, formatPrice, formatSignedPct, formatUsd } from "@/lib/format";
@@ -16,6 +16,20 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 export function MarketsTable({ markets }: { markets: LiveMarket[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("volume24hUsd");
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Real keyboard shortcut, not just a decorative hint next to the input — ⌘K/Ctrl+K jumps
+  // straight to the search box, same as the hint implies.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const rows = useMemo(() => {
     const q = query.trim().toUpperCase();
@@ -28,12 +42,18 @@ export function MarketsTable({ markets }: { markets: LiveMarket[] }) {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={`Search ${markets.length} markets…`}
-          className="w-full max-w-xs rounded-full border border-white/10 bg-ink-950 px-4 py-2 text-sm text-foreground outline-none placeholder:text-mist-dim focus:border-accent/50"
-        />
+        <div className="relative w-full max-w-xs">
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${markets.length} markets…`}
+            className="w-full rounded-full border border-white/10 bg-ink-950 py-2 pl-4 pr-14 text-sm text-foreground outline-none placeholder:text-mist-dim focus:border-accent/50"
+          />
+          <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-mist-dim">
+            ⌘K
+          </kbd>
+        </div>
         <div className="flex items-center gap-1 text-xs text-mist-dim">
           <span className="mr-1">Sort by</span>
           {SORT_OPTIONS.map((opt) => (

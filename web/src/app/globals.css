@@ -40,3 +40,26 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* Soft, slowly-drifting glow behind every page — fixed so it doesn't scroll with content. */
+.bg-glow {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  background: var(--color-ink-950);
+  pointer-events: none;
+}
+
+.bg-glow::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  left: -15%;
+  width: 60rem;
+  height: 60rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-accent) 22%, transparent) 0%, transparent 70%);
+  filter: blur(10px);
+  animation: drift 22s ease-in-out infinite;
+}
