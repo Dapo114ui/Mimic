@@ -22,7 +22,7 @@ export function Navbar() {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
             <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent" />
           </span>
-          Mimic
+          Nadoterminal
         </Link>
 
         <nav className="hidden items-center gap-1 rounded-full border border-white/10 bg-ink-900/70 p-1 text-sm backdrop-blur-xl md:flex">

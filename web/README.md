@@ -1,4 +1,4 @@
-# Mimic — web
+# Nadoterminal — web
 
 **Live:** [surgeterminal.vercel.app](https://surgeterminal.vercel.app)
 
@@ -19,7 +19,7 @@ Next.js (App Router) + Tailwind CSS v4 + wagmi/viem for wallet connection and or
   ratio, unrealized PnL, open positions, open orders (with cancel), and fill history. Nothing
   here is sample data — if there's no wallet connected, or the connected wallet has no Nado
   account yet, the page says so rather than showing a placeholder account.
-- **`/vault`** — mint/burn Nado's own native liquidity vault (NLP) — not a Mimic product,
+- **`/vault`** — mint/burn Nado's own native liquidity vault (NLP) — not a Nadoterminal product,
   reached directly through Nado's gateway. Real NLP price, total supply, TVL, and (once
   connected) your own NLP balance, lock status, and measured mint/burn fees. Mint and burn are
   both confirmed working end to end.

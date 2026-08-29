@@ -3,7 +3,7 @@ import { NlpVaultForm } from "@/components/terminal/NlpVaultForm";
 import { NlpVaultStats } from "@/components/vault/NlpVaultStats";
 
 export const metadata: Metadata = {
-  title: "NLP Vault — Mimic",
+  title: "NLP Vault — Nadoterminal",
   description: "Mint or burn Nado's native liquidity vault (NLP) on Ink mainnet.",
 };
 
@@ -16,7 +16,7 @@ export default function VaultPage() {
         </h1>
         <p className="mt-3 text-mist">
           NLP is Nado&apos;s own protocol liquidity vault — deposit the quote asset to mint NLP,
-          burn NLP to redeem. This isn&apos;t a Mimic product; it&apos;s Nado&apos;s native
+          burn NLP to redeem. This isn&apos;t a Nadoterminal product; it&apos;s Nado&apos;s native
           vault, reached directly through their gateway API.
         </p>
 

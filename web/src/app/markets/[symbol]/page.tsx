@@ -5,7 +5,7 @@ import { MarketDetail } from "@/components/terminal/MarketDetail";
 // enumerated at build time — and shouldn't be, since Nado can list new markets at any point.
 export async function generateMetadata({ params }: PageProps<"/markets/[symbol]">) {
   const { symbol } = await params;
-  return { title: `${decodeURIComponent(symbol)} — Mimic` };
+  return { title: `${decodeURIComponent(symbol)} — Nadoterminal` };
 }
 
 export default async function MarketDetailPage({ params }: PageProps<"/markets/[symbol]">) {

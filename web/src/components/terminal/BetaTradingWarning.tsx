@@ -19,7 +19,7 @@ export function BetaTradingWarning({ context = "order" }: { context?: "order" | 
             Mint and burn are both confirmed working end to end against a real funded account.
             Note the economics before using this at small size: a real $1 mint plus burn round
             trip cost <span className="font-medium">$3.00 in fees</span> ($1 minting, $2 burning),
-            turning a $5 balance into $2. These are Nado&apos;s fees, not Mimic&apos;s, and they
+            turning a $5 balance into $2. These are Nado&apos;s fees, not Nadoterminal&apos;s, and they
             are flat rather than proportional — negligible on a large position, ruinous on a
             small one.
           </>
