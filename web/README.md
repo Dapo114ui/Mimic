@@ -1,6 +1,6 @@
 # Nadoterminal — web
 
-**Live:** [surgeterminal.vercel.app](https://surgeterminal.vercel.app)
+**Live:** [nadoterminal.xyz](https://nadoterminal.xyz)
 
 A market data, order-placement, and portfolio dashboard for [Nado](https://www.nado.xyz/).
 Next.js (App Router) + Tailwind CSS v4 + wagmi/viem for wallet connection and order signing,
