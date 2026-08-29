@@ -5,6 +5,7 @@ import { usePortfolio } from "@/lib/nado/usePortfolio";
 import { ConnectButton } from "@/components/ConnectButton";
 import { SideBadge } from "@/components/terminal/SideBadge";
 import { OpenOrdersTable } from "@/components/portfolio/OpenOrdersTable";
+import { PendingTriggerOrders } from "@/components/portfolio/PendingTriggerOrders";
 import { FeeSchedule } from "@/components/portfolio/FeeSchedule";
 import { formatDateTime, formatSignedPct, formatUsd } from "@/lib/format";
 
@@ -111,11 +112,20 @@ export function PortfolioView() {
       <section className="mt-10">
         <h2 className="text-lg font-medium text-foreground">Open orders</h2>
         <p className="mt-1 text-xs text-mist-dim">
-          BTC-PERP and ETH-PERP only — the only markets you can place orders in here. Placing and
-          cancelling are both confirmed working end to end against a real resting order on
-          mainnet.
+          Every Nado market. Placing and cancelling are both confirmed working end to end against
+          a real resting order on mainnet.
         </p>
         <OpenOrdersTable />
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-lg font-medium text-foreground">Pending TP/SL orders</h2>
+        <p className="mt-1 text-xs text-mist-dim">
+          Take-profit and stop-loss orders placed from the order form — these sit with Nado&apos;s
+          separate trigger service until their price condition is met, not on the regular order
+          book, so they don&apos;t show up in Open Orders above.
+        </p>
+        <PendingTriggerOrders />
       </section>
 
       <section className="mt-10">

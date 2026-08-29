@@ -22,6 +22,15 @@ export const NADO_GATEWAY_WS = "wss://gateway.prod.nado.xyz/v1/ws";
 // oracle prices track the gateway's live price within fractions of a percent.
 export const NADO_INDEXER_REST = "https://archive.prod.nado.xyz/v1";
 
+// The trigger service — a separate deployment from the gateway above, for conditional orders
+// (TP/SL, stop, TWAP) that don't execute immediately but wait on a price or time condition.
+// Confirmed real and live: a throwaway-signed `place_order` with a price trigger and the
+// reduce-only bit set reached the same "signer does not match" stage a fully valid order
+// would, using the exact same Order EIP-712 domain/type as the gateway (per Nado's own
+// signing docs: place_order always verifies against `address(productId)` regardless of which
+// service receives it). Source: docs.nado.xyz "Endpoints" page.
+export const NADO_TRIGGER_REST = "https://trigger.prod.nado.xyz/v1";
+
 // The "endpoint" (sequencer) contract — the EIP-712 verifying contract for every execute
 // EXCEPT place_order/cancel_orders, which instead verify against address(productId).
 export const NADO_ENDPOINT_CONTRACT = "0x05ec92D78ED421f3D3Ada77FFdE167106565974E" as const;

@@ -3,12 +3,27 @@
 import { type FormEvent, useState } from "react";
 import { parseUnits } from "viem";
 import { useAccount, useSignTypedData } from "wagmi";
-import { APPENDIX, encodeSubaccount, generateNonce, getOrderDomain, ORDER_TYPES } from "@/lib/nado/eip712";
+import {
+  buildAppendix,
+  encodeSubaccount,
+  generateNonce,
+  getOrderDomain,
+  ORDER_TYPE,
+  ORDER_TYPES,
+  TRIGGER_TYPE,
+} from "@/lib/nado/eip712";
 import { nadoExecute } from "@/lib/nado/client";
+import { placeTriggerOrder, triggerExecutionPriceX18, triggerRequirementKey } from "@/lib/nado/triggerOrders";
 import { useFeeRates } from "@/lib/nado/useFeeRates";
 import { useOrderBook } from "@/lib/nado/useOrderBook";
 import { formatPrice, formatUsd } from "@/lib/format";
 import { BetaTradingWarning } from "./BetaTradingWarning";
+
+// Trigger orders (TP/SL) aren't meant to expire on the same 30-day window a resting limit/market
+// order uses — they're meant to sit until triggered, which could be weeks out. Nado's own trigger
+// docs examples all use this exact value (4294967295 = 0xFFFFFFFF, year 2106) rather than a real
+// deadline, so that's what's used here too rather than inventing a shorter one.
+const TRIGGER_EXPIRATION = 4294967295n;
 
 // Confirmed live: every perp product reports min_size 100 (identical across products priced from
 // $0.0026 to $73k, so it's a dollar floor, not a unit count), and a real $79 order was rejected
@@ -46,6 +61,10 @@ export function OrderForm({
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [size, setSize] = useState("");
   const [price, setPrice] = useState("");
+  const [reduceOnly, setReduceOnly] = useState(false);
+  const [tpSlEnabled, setTpSlEnabled] = useState(false);
+  const [takeProfitPrice, setTakeProfitPrice] = useState("");
+  const [stopLossPrice, setStopLossPrice] = useState("");
   const [status, setStatus] = useState<Status>({ type: "idle" });
 
   const bestLevel = side === "buy" ? book?.asks[0] : book?.bids[0];
@@ -98,6 +117,41 @@ export function OrderForm({
       return;
     }
 
+    const hasTakeProfit = tpSlEnabled && takeProfitPrice.trim() !== "";
+    const hasStopLoss = tpSlEnabled && stopLossPrice.trim() !== "";
+    if (tpSlEnabled && !hasTakeProfit && !hasStopLoss) {
+      setStatus({ type: "error", message: "Enter a take-profit and/or stop-loss price, or turn TP/SL off" });
+      return;
+    }
+    // Sanity-check direction against the live reference price used for the main order — a TP
+    // set below entry (long) or above entry (short) would trigger immediately/backwards, which
+    // Nado's server has no way to reject as "wrong" since any price is structurally valid.
+    const referencePrice = bestLevel?.price;
+    if (referencePrice !== undefined) {
+      if (hasTakeProfit) {
+        const tp = Number(takeProfitPrice);
+        const wrongSide = side === "buy" ? tp <= referencePrice : tp >= referencePrice;
+        if (Number.isFinite(tp) && wrongSide) {
+          setStatus({
+            type: "error",
+            message: `Take-profit price should be ${side === "buy" ? "above" : "below"} the current price`,
+          });
+          return;
+        }
+      }
+      if (hasStopLoss) {
+        const sl = Number(stopLossPrice);
+        const wrongSide = side === "buy" ? sl >= referencePrice : sl <= referencePrice;
+        if (Number.isFinite(sl) && wrongSide) {
+          setStatus({
+            type: "error",
+            message: `Stop-loss price should be ${side === "buy" ? "below" : "above"} the current price`,
+          });
+          return;
+        }
+      }
+    }
+
     setStatus({ type: "pending" });
 
     try {
@@ -120,10 +174,10 @@ export function OrderForm({
       // appendix, 0, does not match the expected version: 1" — Nado bumped the required version
       // since this was first verified against documentation (which said 0). Confirmed the fix
       // (not just the error) live: appendix=0 reproduces that exact rejection, appendix=1
-      // clears it and reaches an unrelated later validation stage instead. APPENDIX.DEFAULT
-      // bakes that in; APPENDIX.IOC is the same version bit plus order type 1 — see the comment
-      // above APPENDIX in eip712.ts for how that decoding was confirmed.
-      const appendix = kind === "market" ? APPENDIX.IOC : APPENDIX.DEFAULT;
+      // clears it and reaches an unrelated later validation stage instead — see buildAppendix's
+      // own comment in eip712.ts for the full order-type/reduce-only/trigger confirmation.
+      const orderType = kind === "market" ? ORDER_TYPE.IOC : ORDER_TYPE.DEFAULT;
+      const appendix = buildAppendix({ orderType, reduceOnly });
 
       const signature = await signTypedDataAsync({
         domain: getOrderDomain(productId),
@@ -147,12 +201,72 @@ export function OrderForm({
         borrow_margin: null,
       });
 
-      setStatus({
-        type: "success",
-        message: `${side === "buy" ? "Buy" : "Sell"} ${kind} order submitted`,
-      });
+      // TP/SL legs are separate signed orders submitted to Nado's trigger service, not part of
+      // the order just placed above — each is its own reduce-only, IOC, price-triggered Order
+      // closing the position in the opposite direction once its price condition is met. Placed
+      // sequentially (not Promise.all) so a wallet only ever has one signature prompt open at a
+      // time; if the take-profit leg fails, the stop-loss is still attempted rather than
+      // abandoned, and both outcomes are tracked (not inferred from error text) so the final
+      // message says exactly what did and didn't go through.
+      const closingSide = side === "buy" ? "sell" : "buy";
+      const legsPlaced: string[] = [];
+      const legFailures: string[] = [];
+
+      async function placeTpSlLeg(legKind: "tp" | "sl", triggerPrice: string) {
+        const label = legKind === "tp" ? "take-profit" : "stop-loss";
+        try {
+          const triggerPriceX18 = parseUnits(triggerPrice, 18);
+          const legAmount = amountMagnitude * (closingSide === "buy" ? 1n : -1n);
+          const legPriceX18 = triggerExecutionPriceX18(triggerPriceX18, closingSide, priceIncrementX18);
+          const legNonce = generateNonce();
+          const legAppendix = buildAppendix({
+            orderType: ORDER_TYPE.IOC,
+            reduceOnly: true,
+            triggerType: TRIGGER_TYPE.PRICE,
+          });
+          const legOrder = {
+            sender,
+            priceX18: legPriceX18,
+            amount: legAmount,
+            expiration: TRIGGER_EXPIRATION,
+            nonce: legNonce,
+            appendix: legAppendix,
+          };
+          const legSignature = await signTypedDataAsync({
+            domain: getOrderDomain(productId),
+            types: ORDER_TYPES,
+            primaryType: "Order",
+            message: legOrder,
+          });
+          await placeTriggerOrder({
+            productId,
+            order: legOrder,
+            requirementKey: triggerRequirementKey(side, legKind),
+            triggerPriceX18,
+            signature: legSignature,
+          });
+          legsPlaced.push(label);
+        } catch (err) {
+          legFailures.push(`${label} (${err instanceof Error ? err.message : "failed"})`);
+        }
+      }
+
+      if (hasTakeProfit) await placeTpSlLeg("tp", takeProfitPrice);
+      if (hasStopLoss) await placeTpSlLeg("sl", stopLossPrice);
+
+      const successMessage = `${side === "buy" ? "Buy" : "Sell"} ${kind} order submitted${
+        legsPlaced.length ? ` with ${legsPlaced.join(" + ")}` : ""
+      }`;
+
+      setStatus(
+        legFailures.length > 0
+          ? { type: "error", message: `${successMessage}, but ${legFailures.join(" and ")} failed to place` }
+          : { type: "success", message: successMessage }
+      );
       setSize("");
       setPrice("");
+      setTakeProfitPrice("");
+      setStopLossPrice("");
     } catch (err) {
       setStatus({ type: "error", message: err instanceof Error ? err.message : "Order failed" });
     }
@@ -242,6 +356,63 @@ export function OrderForm({
             </p>
           </div>
         )}
+
+        <label className="flex items-center gap-2 text-sm text-mist">
+          <input
+            type="checkbox"
+            checked={reduceOnly}
+            onChange={(e) => setReduceOnly(e.target.checked)}
+            className="h-4 w-4 rounded border-white/20 bg-ink-950 accent-accent"
+          />
+          Reduce only
+        </label>
+
+        <div>
+          <label className="flex items-center gap-2 text-sm text-mist">
+            <input
+              type="checkbox"
+              checked={tpSlEnabled}
+              onChange={(e) => setTpSlEnabled(e.target.checked)}
+              className="h-4 w-4 rounded border-white/20 bg-ink-950 accent-accent"
+            />
+            TP/SL
+          </label>
+
+          {tpSlEnabled && (
+            <div className="mt-3 space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <label className="block">
+                <span className="text-xs uppercase tracking-wider text-mist-dim">Take profit price</span>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={takeProfitPrice}
+                  onChange={(e) => setTakeProfitPrice(e.target.value)}
+                  placeholder="Optional"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-4 py-2.5 font-mono text-foreground outline-none focus:border-accent/50"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs uppercase tracking-wider text-mist-dim">Stop loss price</span>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={stopLossPrice}
+                  onChange={(e) => setStopLossPrice(e.target.value)}
+                  placeholder="Optional"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-ink-950 px-4 py-2.5 font-mono text-foreground outline-none focus:border-accent/50"
+                />
+              </label>
+              <p className="text-xs text-mist-dim">
+                Each one is a separate reduce-only order placed with Nado&apos;s trigger service —
+                expect a separate wallet signature for every price you set here, on top of the
+                signature for the order above. They close the full position size once triggered
+                and appear under Portfolio → Pending TP/SL orders, not in the regular order book.
+              </p>
+            </div>
+          )}
+        </div>
 
         {notional !== null && (
           <div className="space-y-1 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-xs">

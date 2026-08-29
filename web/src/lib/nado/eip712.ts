@@ -74,13 +74,27 @@ export const BURN_NLP_TYPES = {
 
 // Confirmed against packages/shared/src/eip712/getNadoEIP712Types.ts in the SDK — the primary
 // type name is "Cancellation", not the more obvious-looking "CancelOrders" guess. `productIds`
-// is uint32[] specifically (not uint256[]), matching the SDK's own struct exactly.
+// is uint32[] specifically (not uint256[]), matching the SDK's own struct exactly. Also the
+// type signed for the *trigger* service's cancel_orders — confirmed by docs.nado.xyz, which
+// points its trigger cancel-orders page straight at the gateway's Cancellation signing section
+// rather than defining a separate type.
 export const CANCEL_ORDERS_TYPES = {
   Cancellation: [
     { name: "sender", type: "bytes32" },
     { name: "productIds", type: "uint32[]" },
     { name: "digests", type: "bytes32[]" },
     { name: "nonce", type: "uint64" },
+  ],
+} as const;
+
+// Trigger-service-only: authenticates a read of your own pending TP/SL/TWAP orders. Confirmed
+// against docs.nado.xyz's Signing page (Domain section) — every non-place_order execute/query
+// signs against the endpoint contract, same as Cancellation/MintNlp/BurnNlp above, and this is
+// the one new struct type the trigger service adds beyond what the gateway already has.
+export const LIST_TRIGGER_ORDERS_TYPES = {
+  ListTriggerOrders: [
+    { name: "sender", type: "bytes32" },
+    { name: "recvTime", type: "uint64" },
   ],
 } as const;
 
@@ -109,38 +123,52 @@ export function generateNonce(): bigint {
   return (recvTimeMs << 20n) | random;
 }
 
-// appendix bit layout: version:8 (bits 0-7), isolated:1 (bit 8), orderType:2 (bits 9-10),
-// reduceOnly:1 (bit 11), trigger:2 (bits 12-13), reserved:50, value:64. Two of the four
-// orderType values are directly confirmed against real gateway data: every plain order this
-// form has ever placed used appendix=1 (orderType 0) and came back `order_type: "default"`; a
-// real resting order was seen with `order_type: "post_only"` AND appendix "1537" in the same
-// response — 1537 = version(1) | 3<<9, so orderType 3 decodes to post_only. Nado is a Vertex
-// protocol fork (already relied on elsewhere: the "Cancellation" EIP-712 type name, the
-// [initial, maintenance, unweighted] health group ordering) and Vertex's own OrderType enum is
-// exactly {DEFAULT, IOC, FOK, POST_ONLY} in that order — matching both confirmed endpoints (0,
-// 3) exactly, so 1 and 2 are taken to be IOC and FOK respectively.
+// appendix bit layout, now confirmed directly against Nado's own docs (docs.nado.xyz's Order
+// Appendix page) rather than inferred: version:8 (bits 0-7, "Currently 1"), isolated:1 (bit 8),
+// orderType:2 (bits 9-10), reduceOnly:1 (bit 11), trigger:2 (bits 12-13), reserved:24 (must be
+// 0), builderFeeRate:10 (bits 38-47), builder:16 (bits 48-63), value:64 (bits 64-127, meaning
+// depends on trigger/isolated). The order-type and reduce-only bits were already independently
+// verified live before this doc was found — every plain order this form has placed used
+// appendix=1 (orderType 0, "default"); a real resting order came back with `order_type:
+// "post_only"` and appendix "1537" (= version(1) | 3<<9) in the same response; and a
+// throwaway-signed order with appendix=513 (IOC, version(1) | 1<<9) reached the same
+// signer-mismatch stage a fully valid order would, while a deliberately wrong version got a
+// distinct "Invalid Order Version" rejection instead — proving appendix content is genuinely
+// checked, not just unreached. The docs confirm the exact enum: orderType
+// {0:DEFAULT, 1:IOC, 2:FOK, 3:POST_ONLY}, triggerType {0:NONE, 1:PRICE, 2:TWAP, 3:TWAP_CUSTOM}.
 //
-// appendix=513 (IOC) is now confirmed live, not just inferred: a real `place_order` built with
-// this exact appendix, a real product/sender/nonce/expiration, and a price computed by this
-// form's own market-order logic against a real live order book — but signed by an unrelated
-// throwaway key — was submitted straight to the gateway. It came back "The provided signature
-// does not match with the sender's or the linked signer's" (error_code 2028), the same
-// signer-mismatch stage a fully valid order would also have to clear, not an order-type or
-// version rejection. A control run with the same throwaway-signed shape but a deliberately
-// invalid appendix (version 99) came back "Invalid Order Version" instead — proving appendix
-// content genuinely gets validated before that signer check, so IOC's clean pass through it
-// means order type 1 is accepted, not just unreached. What's still unconfirmed is Nado's own
-// semantics for it (does it actually behave as immediate-or-cancel) — that needs a real wallet
-// to sign and a real fill/cancel to observe, which this sandbox can't do.
-// IOC (immediate-or-cancel: cross whatever is available right now, cancel the remainder instead
-// of resting) is the standard way CLOB protocols in this family implement "market" orders, which
-// is what MARKET.IOC is used for below.
+// One live discrepancy the docs themselves have: the general Order Appendix page's own
+// manual-bit-manipulation example sets version=1 for every appendix, including trigger orders,
+// but the separate Trigger > Place Order page's example hardcodes "Version (bits 0-7): Always
+// 0" for trigger orders specifically and computes a result consistent with that (4096, not
+// 4097). That page is also stamped "last updated 9 months ago" — plausibly stale from before
+// the same version 0→1 bump this codebase already had to work around once for the gateway (see
+// the note in OrderForm.tsx). Resolved live rather than guessed either way: a throwaway-signed
+// trigger place_order with version=1, reduceOnly=1, triggerType=PRICE (appendix=6145) submitted
+// straight to https://trigger.prod.nado.xyz/v1/execute reached the same signer-mismatch stage,
+// using the exact same Order type/domain as the gateway — confirming version=1 is correct for
+// trigger orders too, and that trigger orders sign against the standard per-product order
+// domain, not a separate one.
 const ORDER_VERSION = 1n;
 const ORDER_TYPE_BIT = 9n;
+const REDUCE_ONLY_BIT = 11n;
+const TRIGGER_TYPE_BIT = 12n;
 
-export const APPENDIX = {
-  DEFAULT: ORDER_VERSION,
-  IOC: ORDER_VERSION | (1n << ORDER_TYPE_BIT),
-  FOK: ORDER_VERSION | (2n << ORDER_TYPE_BIT),
-  POST_ONLY: ORDER_VERSION | (3n << ORDER_TYPE_BIT),
-} as const;
+export const ORDER_TYPE = { DEFAULT: 0n, IOC: 1n, FOK: 2n, POST_ONLY: 3n } as const;
+export const TRIGGER_TYPE = { NONE: 0n, PRICE: 1n, TWAP: 2n, TWAP_CUSTOM_AMOUNTS: 3n } as const;
+
+export function buildAppendix({
+  orderType = ORDER_TYPE.DEFAULT,
+  reduceOnly = false,
+  triggerType = TRIGGER_TYPE.NONE,
+}: {
+  orderType?: bigint;
+  reduceOnly?: boolean;
+  triggerType?: bigint;
+} = {}): bigint {
+  let appendix = ORDER_VERSION;
+  appendix |= orderType << ORDER_TYPE_BIT;
+  if (reduceOnly) appendix |= 1n << REDUCE_ONLY_BIT;
+  appendix |= triggerType << TRIGGER_TYPE_BIT;
+  return appendix;
+}

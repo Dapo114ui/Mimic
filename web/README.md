@@ -39,6 +39,7 @@ src/
                                # LiveMarketPanel, MarketDetail, LiveMarketsTable,
                                # BetaTradingWarning, SideBadge
     portfolio/                 # PortfolioView (the /portfolio page body), OpenOrdersTable,
+                                # PendingTriggerOrders (TP/SL, explicit-refresh not polled),
                                 # AccountSummaryLink (the homepage "Your account" card) — real, client
     vault/                      # NlpVaultStats (price/supply/TVL/your balance) — real, client
     Navbar.tsx, Footer.tsx, ConnectButton.tsx, Providers.tsx
@@ -48,10 +49,16 @@ src/
     wagmi.ts                    # wagmi config — Ink mainnet (chain 57073), injected connector
     nado/
       config.ts                 # real gateway + indexer endpoints, chain ID, verified addresses
-      eip712.ts                 # order/MintNlp/BurnNlp/Cancellation signing domains, types,
-                                 # subaccount encoding, APPENDIX order-type constants (DEFAULT/
-                                 # IOC/FOK/POST_ONLY)
+      eip712.ts                 # order/MintNlp/BurnNlp/Cancellation/ListTriggerOrders signing
+                                 # domains, types, subaccount encoding, buildAppendix() (order
+                                 # type, reduce-only, trigger type, composable)
       client.ts                 # query()/execute() against the real gateway (POST-based)
+      triggerClient.ts           # query()/execute() against the separate trigger service
+                                  # (trigger.prod.nado.xyz) — same wire shape as client.ts
+      triggerOrders.ts            # TP/SL business logic: place/cancel/list trigger orders,
+                                   # the long/short-aware price-requirement direction, the
+                                   # slippage-capped execution price for a triggered order
+      useTriggerOrders.ts          # place-on-demand (not polled — see below), list, cancel
       indexer.ts                 # funding_rate / market_snapshots / candlesticks /
                                   # matches_and_liquidations / account trade history against the
                                   # real archive service (POST — a different wire format from
@@ -441,6 +448,59 @@ a raw BigInt for the same exact-math reason).
 One consequence worth calling out: a market order always takes, never rests, so it only ever pays
 the taker fee rate — `OrderForm` drops the maker-fee line entirely when the Market tab is active
 rather than showing a maker rate that order type can never actually earn.
+
+`OrderForm` now has Reduce Only and TP/SL too, closing the last visible gap against Nado's own
+order form. Unlike the market-order work above, this wasn't reverse-engineered from live
+probing — Nado's own docs (docs.nado.xyz) turned out to have a complete, current Order Appendix
+spec, found while researching an unrelated builder-fee question. It confirms, word for word, what
+this codebase had already independently verified live: orderType `{0:DEFAULT, 1:IOC, 2:FOK,
+3:POST_ONLY}`, and adds two fields that weren't needed until now — reduceOnly (bit 11, a plain
+flag) and a 2-bit trigger type (`{0:NONE, 1:PRICE, 2:TWAP, 3:TWAP_CUSTOM_AMOUNTS}`) at bits
+12-13. `buildAppendix()` in `eip712.ts` replaced the old flat `APPENDIX.DEFAULT/IOC/FOK/POST_ONLY`
+constants with a composable version so these can combine with order type instead of only ever
+appearing alone.
+
+TP/SL turned out to be a materially bigger integration than a bitfield, though: trigger orders
+(stop, take-profit, TWAP) don't go through the gateway at all — they're a genuinely separate
+service, `https://trigger.prod.nado.xyz/v1`, with its own `/execute` and `/query` endpoints
+(`triggerClient.ts`, mirroring `client.ts`'s request/response shape exactly since the wire format
+turned out identical). Placing one signs the *same* `Order` EIP-712 type through the *same*
+per-product domain the gateway uses — confirmed live, not assumed, by replaying a throwaway-signed
+trigger `place_order` (reduce-only + price-trigger appendix) straight at that endpoint and getting
+the same "signer does not match" rejection a fully valid order would, the identical technique
+used earlier for the market-order appendix. That same probe resolved a real discrepancy between
+two of Nado's own doc pages: the general Order Appendix page's manual bit-math example uses
+version 1 for every appendix, but the separate Trigger > Place Order page's own example hardcodes
+"version 0" for trigger orders specifically — stale, from before the same version bump this
+codebase already had to work around once for the gateway (that page is stamped "updated 9 months
+ago"). Version 1 reached the same signer-mismatch stage live; version 0 was never tested against
+production since the general spec page — the one that's current — already said 1.
+
+Viewing and cancelling pending TP/SL orders needed a new EIP-712 type, `ListTriggerOrders`
+(`sender`, `recvTime`), signed against the same endpoint domain everything except place_order
+uses. One real constraint this surfaced: unlike the gateway's open-orders query, listing trigger
+orders requires a *freshly signed* transaction every single call — the `recvTime` deadline can't
+be more than 100 seconds out. `useOpenOrders` polls silently every 10s; doing that here would mean
+a wallet signature popup every few seconds, which is why `useTriggerOrders` deliberately doesn't
+auto-poll — it loads once on mount and otherwise waits for an explicit Refresh click
+(`PendingTriggerOrders`, under Portfolio).
+
+Placing a TP/SL order is, structurally, placing an *additional*, fully independent order per
+leg: a reduce-only, IOC, price-triggered `Order` closing the full position in the opposite
+direction once triggered, each needing its own nonce and its own wallet signature — so setting
+both take-profit and stop-loss on one trade means up to three separate signature prompts (the
+main order, then each leg), and the form's copy says so rather than surprising the user with a
+third popup. The triggered order still needs a real limit price to execute at once it fires, and
+there's no live order book to check against ahead of time the way a market order can — so
+`triggerExecutionPriceX18` applies the same fixed 1% slippage cap past the trigger price itself
+that the market-order path applies past the live best bid/ask, tick-rounded the same exact-BigInt
+way.
+
+What isn't verified yet, and can't be from this sandbox any more than the market order's fill
+semantics could: whether a placed trigger order actually fires and closes the position when its
+price condition is hit. That needs a real wallet, a real open position, and either patience or a
+price move — the natural next check once this is used for real, the same honest gap the market
+order work left open.
 
 ## Usage
 
