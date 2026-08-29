@@ -1,4 +1,4 @@
-# Mimic
+# Nadoterminal
 
 A trading dashboard for [Nado](https://www.nado.xyz/), a CLOB perps/spot/margin DEX on Ink L2:
 prices and charts across Nado's markets, an account view (equity, positions, trade history),
